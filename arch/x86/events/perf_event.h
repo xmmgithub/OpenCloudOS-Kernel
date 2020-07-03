@@ -779,6 +779,12 @@ struct x86_pmu {
 	int (*aux_output_match) (struct perf_event *event);
 };
 
+struct x86_perf_task_context_opt {
+	int lbr_callstack_users;
+	int lbr_stack_state;
+	int log_id;
+};
+
 struct x86_perf_task_context {
 	u64 lbr_from[MAX_LBR_ENTRIES];
 	u64 lbr_to[MAX_LBR_ENTRIES];
@@ -786,9 +792,7 @@ struct x86_perf_task_context {
 	u64 lbr_sel;
 	int tos;
 	int valid_lbrs;
-	int lbr_callstack_users;
-	int lbr_stack_state;
-	int log_id;
+	struct x86_perf_task_context_opt opt;
 };
 
 #define x86_add_quirk(func_)						\
