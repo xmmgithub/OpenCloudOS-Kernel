@@ -1460,7 +1460,6 @@ void dma_issue_pending_all(void);
 struct dma_chan *__dma_request_channel(const dma_cap_mask_t *mask,
 				       dma_filter_fn fn, void *fn_param,
 				       struct device_node *np);
-struct dma_chan *dma_request_slave_channel(struct device *dev, const char *name);
 
 struct dma_chan *dma_request_chan(struct device *dev, const char *name);
 struct dma_chan *dma_request_chan_by_mask(const dma_cap_mask_t *mask);
@@ -1487,11 +1486,6 @@ static inline struct dma_chan *__dma_request_channel(const dma_cap_mask_t *mask,
 						     dma_filter_fn fn,
 						     void *fn_param,
 						     struct device_node *np)
-{
-	return NULL;
-}
-static inline struct dma_chan *dma_request_slave_channel(struct device *dev,
-							 const char *name)
 {
 	return NULL;
 }
@@ -1565,6 +1559,15 @@ void dma_run_dependencies(struct dma_async_tx_descriptor *tx);
 	__dma_request_channel(&(mask), x, y, NULL)
 #define dma_request_slave_channel_compat(mask, x, y, dev, name) \
 	__dma_request_slave_channel_compat(&(mask), x, y, dev, name)
+
+/* Deprecated, please use dma_request_chan() directly */
+static inline struct dma_chan * __deprecated
+dma_request_slave_channel(struct device *dev, const char *name)
+{
+	struct dma_chan *ch = dma_request_chan(dev, name);
+
+	return IS_ERR(ch) ? NULL : ch;
+}
 
 static inline struct dma_chan
 *__dma_request_slave_channel_compat(const dma_cap_mask_t *mask,
