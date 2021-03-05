@@ -37,6 +37,8 @@ void iommu_dma_compose_msi_msg(struct msi_desc *desc,
 
 void iommu_dma_get_resv_regions(struct device *dev, struct list_head *list);
 
+extern bool iommu_dma_forcedac;
+
 #else /* CONFIG_IOMMU_DMA */
 
 struct iommu_domain;
