@@ -117,6 +117,8 @@
 # define CC_OUT(c) [_cc_ ## c] "=qm"
 #endif
 
+#ifdef __KERNEL__
+
 /* Exception table entry */
 #ifdef __ASSEMBLY__
 # define _ASM_EXTABLE_HANDLE(from, to, handler)			\
@@ -192,5 +194,7 @@
 register unsigned long current_stack_pointer asm(_ASM_SP);
 #define ASM_CALL_CONSTRAINT "+r" (current_stack_pointer)
 #endif
+
+#endif /* __KERNEL__ */
 
 #endif /* _ASM_X86_ASM_H */
