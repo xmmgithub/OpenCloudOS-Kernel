@@ -1,16 +1,10 @@
- ![img](images/tencentos-logo.png) 
+# OpenCloudOS kernel
 
-
-# TencentOS Server kernel
-[TencentOS Server kernel](#tencentos-server-kernel)
-
-- TencentOS Server( 又名Tencent Linux 简称Tlinux) 是腾讯针对云的场景研发的 Linux 操作系统，提供了专门的功能特性和性能优化，为云服务器实例中的应用程序提供高性能，且更加安全可靠的运行环境。Tencent Linux 使用免费，在 CentOS（及发行版）上开发的应用程序可直接在 Tencent Linux 上运行，用户还可持续获得腾讯云的更新维护和技术支持。
+OpenCloudOS-Kernel是OpenCloudOS的内核组件，基于upstream Linux kernel，并进行了大量场景化功能特性和性能优化，为应用程序提供高性能，且更加稳定和安全可靠的运行环境。
 
 * [支持平台](#支持平台)
 * [主要特性](#主要特性)
 * [通过源代码编译内核rpm包](#通过源代码编译内核rpm包)
-* [通过腾讯云获取 TencentOs Server(Tlinux)](#通过腾讯云获取-tencentos-servertlinux)
-* [通过腾讯软件源获取TencentOS Server软件安装包](#通过腾讯软件源获取tencentos-server软件安装包)
 * [容器隔离增强](#容器隔离增强)
 * [内核新增启动参数](#内核新增启动参数)
 * [sysctl/proc新增&amp;隔离](#sysctlproc新增隔离)
@@ -45,7 +39,6 @@
   * [业务场景效果](#业务场景效果)
   * [使用方法](#使用方法)
 * [NVME IO隔离](#nvme-io隔离)
-* [联系我们](#联系我们)
 
 ## 支持平台
 
@@ -66,7 +59,7 @@
 | **性能优化** | 计算、存储和网络子系统均经过优化，包括：优化 xfs 内存分配，解决 xfs kmem_alloc 分配失败告警优化网络收包大内存分配问题，解决 UDP 包量大时，占据过多内存问题限制系统 page cache 占用内存比例，从而避免内存不足影响业务的性能或者 OOM |
 | **其他特性** | 离线调度算法(BT) <br/>进程防gdb<br/>ARM64热补丁<br/>pagecache limit |
 | **缺陷支持** | 提供操作系统崩溃后的 kdump 内核转储能力提供内核的热补丁升级能力 |
-| **安全更新** | Tencent Linux 会定期进行更新，增强安全性及功能               |
+| **安全更新** | OpenCloudOS 会定期进行更新，增强安全性及功能               |
 
 
 
@@ -87,42 +80,9 @@
 	
 - debuginfo会包含在kernel-debuginfo包里，内核vmlinux默认释放到/boot目录，模块debuginfo释放到/usr/lib/debug/目录
 
-  
+## 容器资源视图隔离(cgroupfs)
 
-
-## 通过腾讯云获取 TencentOs Server(Tlinux)
-
-腾讯云在 [云服务器控制台](https://console.cloud.tencent.com/cvm) 提供了 Tencent Linux 公共镜像，您可通过下列方法获取并使用 Tencent Linux。
-
-- 创建云服务器实例时，选择公共镜像，并选择 Tencent Linux 的相应版本。
-  操作详情请参见 [创建实例](https://cloud.tencent.com/document/product/213/4855)。
-- 已创建的云服务器实例，可通过重装系统将现有操作系统更换为 Tencent Linux。
-  操作详情请参见 [重装系统](https://cloud.tencent.com/document/product/213/4933)。
-## 通过腾讯软件源获取TencentOS Server软件安装包
-
-- 软件源使用简介 
-TencentOS server使用腾讯软件源作为其yum服务，操作系统中已默认配置好软件源，如需安装软件，只需要使用yum即可在线安装。比如安装httpd，执行下面的命令：
-```
-# yum install httpd
-```
-TencentOS server的内核和用户态包的更新也会持续同步至腾讯软件源，如需升级系统，可执行下面的命令
-```
-# yum update
-```
-通过SCL源的方式安装使用高版本gcc的命令如下
-```
-# yum -y install tlinux-release-sclo（CentOS 7系统请使用yum -y install centos-release-scl-rh）
-# yum -y install devtoolset-8-gcc 
-# scl enable devtoolset-8 bash
-```
-- 内核rpm包链接： http://mirrors.tencent.com/tlinux/2.4/tlinux/x86_64/RPMS/ 
-
-  
-
-
-## 容器隔离增强
-
-由于在docker容器中/proc下数据是通过mount bind host中proc得到的，而内核中proc文件系统大部分没有实现namespace功能，仅有pid和net实现了namespace，因此container中看到的proc诸多统计数据，例如`/proc/meminfo` ,/proc/stat等都是host的全局数据而非container对应的统计数据，这会导致用户在container中使用free，top，或者资源采集时等得到的是错误的数据。为了修正这个问题，使得业务在使用docker容器时可以有途径获得docker自身的统计状态，tlinux内核实现了对一些常用数据的隔离。
+由于在docker容器中/proc下数据是通过mount bind host中proc得到的，而内核中proc文件系统大部分没有实现namespace功能，仅有pid和net实现了namespace，因此container中看到的proc诸多统计数据，例如`/proc/meminfo` ,/proc/stat等都是host的全局数据而非container对应的统计数据，这会导致用户在container中使用free，top，或者资源采集时等得到的是错误的数据。为了修正这个问题，使得业务在使用docker容器时可以有途径获得docker自身的统计状态，内核实现了对一些常用数据的隔离。
 
 - **方案设计**
 
@@ -132,7 +92,7 @@ TencentOS server的内核和用户态包的更新也会持续同步至腾讯软�
 
 ​    ![img](images/docker-isolation.jpg)
 
-tlinux内核在cgroup的memory，cpuset等子系统中分别添加对应的文件输出，然后由用户通过mount bind操作，将同名文件绑定到container的proc中。Mount bind操作可以在docker启动container的流程中添加。
+内核在cgroup的memory，cpuset等子系统中分别添加对应的文件输出，然后由用户通过mount bind操作，将同名文件绑定到container的proc中。Mount bind操作可以在docker启动container的流程中添加。
 
 例如：在memeory子系统对应的container目录中添加meminfo和vmstat文件。
 
@@ -215,14 +175,14 @@ echo "clear 192.168.1.1:/nfs /nfstest " > /proc/tkernel/shield_mounts
 
 **6.** **iotop支持**
 
-- 因为taskstats不支持net namespace，所以iotop不能在容器里正常运行，tlinux通过修改taskstats后，使得iotop能在容器里正常运行。
+- 因为taskstats不支持net namespace，所以iotop不能在容器里正常运行，通过修改taskstats后，使得iotop能在容器里正常运行。
 
   
 
 ## 内核新增启动参数
 
 - irq_force_manage
-	4.14内核默认是不允许用户态修改中断亲和性的，完全交给内核来管理，tlinux默认修改了该行为，使得用户态默认可以修改中断亲和性，当irq_force_manage添加时，回到4.14内核默认行为，即不想允许用户态修改中断亲和性。
+	4.14内核默认是不允许用户态修改中断亲和性的，完全交给内核来管理，我们默认修改了该行为，使得用户态默认可以修改中断亲和性，当irq_force_manage添加时，回到4.14内核默认行为，即不想允许用户态修改中断亲和性。
 
 
 
@@ -378,8 +338,8 @@ NSsid:  1       11126
 
 ## 热补丁
 
-- x86,  x86热补丁，tlinux内核默认合入了kpatch内核模块，可以自行选择是用内核自带的livepatch，或者kpatch。
-- ARM64, arm64默认不支持热补丁，tlinux内核在社区内核的基础上支持了热补丁特性，参加下面章节。
+- x86,  x86热补丁，我们的内核默认合入了kpatch内核模块，可以自行选择是用内核自带的livepatch，或者kpatch。
+- ARM64, arm64默认不支持热补丁，我们的内核在社区内核的基础上支持了热补丁特性，参加下面章节。
 
   
 
@@ -397,7 +357,7 @@ NSsid:  1       11126
 
 目前不同厂商都推出了自己的热补丁技术，包括Ksplice、Kgraft、Kpatch、Livepatch。这几种方案从实现原理上讲大同小异，对x64架构都做了充分的验证，但一直缺乏对arm64架构的支持。业界也没有相应的解决方案。
 
-随着tlinux内核对外版发布，需要我们支持的架构也包含了arm64，随着arm64机型的大量部署。arm64热补丁技术需求变得尤为迫切。
+随着内核对外版发布，需要我们支持的架构也包含了arm64，随着arm64机型的大量部署。arm64热补丁技术需求变得尤为迫切。
 
 由此，我们基于**Kpatch框架**开发了arm64热补丁特性。
 
@@ -445,7 +405,7 @@ x86机器上，如果使用-mfentry，elf文件中ftrace跳转指令位于prolog
 
 
 
-Arm64只支持mcount功能，但是arm64 prologue会对寄存器做修改，所以无法使用stub函数来适配。所以采用gcc patchable-function-entry来实现类似于mfentry的功能。使用了GCC 8.2.1版本来编译内核，rpm包链接地址：https://tlinux-mirror.tencent-cloud.com/tlinux/2.4/arm64/tlinux-sclo/aarch64/tl/devtoolset-8/devtoolset-8-gcc-8.2.1-3.tl2.aarch64.rpm 。
+Arm64只支持mcount功能，但是arm64 prologue会对寄存器做修改，所以无法使用stub函数来适配。所以采用gcc patchable-function-entry来实现类似于mfentry的功能。使用了GCC 8.2.1版本来编译内核.
 
 ![img](images/hot_patch_img7.png)
 
@@ -556,7 +516,7 @@ filling_function 在不同的架构下规则不同，在arm64架构中，主要�
 
 ## 进程防gdb功能
 
-进程防gdb功能，可以让进程在设置保护后，即使是root也不能gdb该进程，阻止跨进程获取内存，加载动态库等。gdb是通过ptrace系统调用来实现的，tlinux内核通过在ptrace调用里增加判断条件实现到阻止进程被gdb的功能，ptrace改动如下：
+进程防gdb功能，可以让进程在设置保护后，即使是root也不能gdb该进程，阻止跨进程获取内存，加载动态库等。gdb是通过ptrace系统调用来实现的，我们的内核通过在ptrace调用里增加判断条件实现到阻止进程被gdb的功能，ptrace改动如下：
 
  ```c
   --- a/kernel/ptrace.c
@@ -782,13 +742,3 @@ echo "259:2 200 > /sys/fs/cgroup/blkio/offline_tasks/blkio.throttle.weight_devic
 ```
 
 以上表示我们希望针对259:2 设备，root cgroup的权重是 offline_tasks的4倍。当root节点持续一段时间对该设备没有io后，其权重会全部被offline_tasks节点瓜分。
-
-
-
-
-
-## 联系我们
-
-- 长期招聘内核高手，欢迎对内核非常感兴趣，有想法的同学加盟, 岗位请猛戳:  https://careers.tencent.com/jobdesc.html?postId=1200233285444177920 
-- TencentOS team邮箱： tencent_os@tencent.com
-
