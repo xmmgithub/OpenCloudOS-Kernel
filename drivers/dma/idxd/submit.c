@@ -160,7 +160,7 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
 	 * that we designated the descriptor to.
 	 */
 	if (desc->hw->flags & IDXD_OP_FLAG_RCI) {
-		ie = &idxd->irq_entries[desc->vector];
+		ie = &idxd->irq_entries[wq->id + 1];
 		llist_add(&desc->llnode, &ie->pending_llist);
 	}
 
