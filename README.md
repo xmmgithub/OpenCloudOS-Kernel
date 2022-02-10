@@ -5,7 +5,7 @@ OpenCloudOS-Kernel是OpenCloudOS的内核组件，基于upstream Linux kernel，
 * [支持平台](#支持平台)
 * [主要特性](#主要特性)
 * [通过源代码编译内核rpm包](#通过源代码编译内核rpm包)
-* [容器隔离增强](#容器隔离增强)
+* [容器资源视图隔离(cgroupfs)](#容器资源视图隔离(cgroupfs))
 * [内核新增启动参数](#内核新增启动参数)
 * [sysctl/proc新增&amp;隔离](#sysctlproc新增隔离)
   * [proc新增](#proc新增)
