@@ -14,9 +14,12 @@
 #include <linux/slab.h>
 #include <linux/seq_file.h>
 #include <linux/scatterlist.h>
+#include <linux/asn1.h>
 #include <keys/asymmetric-subtype.h>
 #include <crypto/public_key.h>
 #include <crypto/akcipher.h>
+#include <crypto/sm2.h>
+#include <crypto/sm3_base.h>
 
 MODULE_DESCRIPTION("In-software asymmetric public-key subtype");
 MODULE_AUTHOR("Red Hat, Inc.");
@@ -83,7 +86,8 @@ int software_key_determine_akcipher(const char *encoding,
 		return n >= CRYPTO_MAX_ALG_NAME ? -EINVAL : 0;
 	}
 
-	if (strcmp(encoding, "raw") == 0) {
+	if (strcmp(encoding, "raw") == 0 ||
+	    strcmp(encoding, "x962") == 0) {
 		strcpy(alg_name, pkey->pkey_algo);
 		return 0;
 	}
@@ -246,6 +250,113 @@ error_free_tfm:
 	return ret;
 }
 
+#if IS_REACHABLE(CONFIG_CRYPTO_SM2)
+static int sm2_cert_sig_digest_update(const struct public_key_signature *sig,
+				      struct crypto_akcipher *tfm_pkey)
+{
+	struct crypto_shash *tfm;
+	struct shash_desc *desc;
+	size_t desc_size;
+	unsigned char dgst[SM3_DIGEST_SIZE];
+	int ret;
+
+	BUG_ON(!sig->data);
+
+	ret = sm2_compute_z_digest(tfm_pkey, SM2_DEFAULT_USERID,
+					SM2_DEFAULT_USERID_LEN, dgst);
+	if (ret)
+		return ret;
+
+	tfm = crypto_alloc_shash(sig->hash_algo, 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	desc_size = crypto_shash_descsize(tfm) + sizeof(*desc);
+	desc = kzalloc(desc_size, GFP_KERNEL);
+	if (!desc) {
+		ret = -ENOMEM;
+		goto error_free_tfm;
+	}
+
+	desc->tfm = tfm;
+
+	ret = crypto_shash_init(desc);
+	if (ret < 0)
+		goto error_free_desc;
+
+	ret = crypto_shash_update(desc, dgst, SM3_DIGEST_SIZE);
+	if (ret < 0)
+		goto error_free_desc;
+
+	ret = crypto_shash_finup(desc, sig->data, sig->data_size, sig->digest);
+
+error_free_desc:
+	kfree(desc);
+error_free_tfm:
+	crypto_free_shash(tfm);
+	return ret;
+}
+#else
+static inline int sm2_cert_sig_digest_update(
+	const struct public_key_signature *sig,
+	struct crypto_akcipher *tfm_pkey)
+{
+	return -ENOTSUPP;
+}
+#endif /* ! IS_REACHABLE(CONFIG_CRYPTO_SM2) */
+
+static int eddsa_cert_sig_digest_update(const struct public_key *pub,
+					const struct public_key_signature *sig)
+{
+	struct crypto_shash *tfm = NULL;
+	struct shash_desc *desc = NULL;
+	int key_size, ret = 0;
+
+	if (strcmp(pub->pkey_algo, "eddsa-25519"))
+		return -ENOPKG;
+
+	tfm = crypto_alloc_shash(sig->hash_algo, 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	desc = kzalloc(sizeof(*desc) + crypto_shash_descsize(tfm), GFP_KERNEL);
+	if (!desc) {
+		ret = -ENOMEM;
+		goto free;
+	}
+
+	desc->tfm = tfm;
+
+	/* RFC8032 section 5.1.7
+	 * step 2. SHA512(dom2(F, C) || R || A || PH(M))
+	 */
+	key_size = 32;
+	if (sig->s_size != key_size * 2 ||
+	    pub->keylen != key_size) {
+		ret = -EINVAL;
+		goto free;
+	}
+
+	ret = crypto_shash_init(desc);
+	if (ret < 0)
+		goto free;
+
+	ret = crypto_shash_update(desc, sig->s, key_size);
+	if (ret < 0)
+		goto free;
+
+	ret = crypto_shash_update(desc, pub->key, key_size);
+	if (ret < 0)
+		goto free;
+
+	ret = crypto_shash_finup(desc, sig->data, sig->data_size, sig->digest);
+
+free:
+	kfree(desc);
+	crypto_free_shash(tfm);
+	return ret;
+}
+
 /*
  * Verify a signature using a public key.
  */
@@ -298,6 +409,18 @@ int public_key_verify_signature(const struct public_key *pkey,
 		ret = crypto_akcipher_set_pub_key(tfm, key, pkey->keylen);
 	if (ret)
 		goto error_free_key;
+
+	if (sig->pkey_algo && sig->data_size) {
+		if (strcmp(sig->pkey_algo, "sm2") == 0) {
+			ret = sm2_cert_sig_digest_update(sig, tfm);
+			if (ret)
+				goto error_free_key;
+		} else if (strcmp(sig->pkey_algo, "eddsa") == 0) {
+			ret = eddsa_cert_sig_digest_update(pkey, sig);
+			if (ret)
+				goto error_free_key;
+		}
+	}
 
 	sg_init_table(src_sg, 2);
 	sg_set_buf(&src_sg[0], sig->s, sig->s_size);
