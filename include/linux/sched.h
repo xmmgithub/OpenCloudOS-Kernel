@@ -457,6 +457,7 @@ struct sched_entity {
 	struct rb_node			run_node;
 	struct list_head		group_node;
 	unsigned int			on_rq;
+	unsigned int			is_bt;
 
 	u64				exec_start;
 	u64				sum_exec_runtime;
@@ -1628,12 +1629,20 @@ extern int task_prio(const struct task_struct *p);
  */
 static inline int task_nice(const struct task_struct *p)
 {
+#ifdef CONFIG_SCHED_BT
+	return p->se.is_bt ? PRIO_TO_BT_NICE((p)->static_prio) :
+	        PRIO_TO_NICE((p)->static_prio);
+#else
 	return PRIO_TO_NICE((p)->static_prio);
+#endif
 }
 
 extern int can_nice(const struct task_struct *p, const int nice);
 extern int task_curr(const struct task_struct *p);
 extern int idle_cpu(int cpu);
+#ifdef CONFIG_SCHED_BT
+extern int idle_bt_cpu(int cpu);
+#endif
 extern int available_idle_cpu(int cpu);
 extern int sched_setscheduler(struct task_struct *, int, const struct sched_param *);
 extern int sched_setscheduler_nocheck(struct task_struct *, int, const struct sched_param *);

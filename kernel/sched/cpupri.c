@@ -31,8 +31,13 @@ static int convert_prio(int prio)
 
 	if (prio == CPUPRI_INVALID)
 		cpupri = CPUPRI_INVALID;
+#ifdef CONFIG_SCHED_BT
+	else if (prio >= MAX_PRIO - 40)
+		cpupri = CPUPRI_IDLE;
+#else
 	else if (prio == MAX_PRIO)
 		cpupri = CPUPRI_IDLE;
+#endif
 	else if (prio >= MAX_RT_PRIO)
 		cpupri = CPUPRI_NORMAL;
 	else

@@ -682,6 +682,10 @@ config GENERIC_SCHED_CLOCK
 
 menu "Scheduler features"
 
+config SCHED_BT
+	bool "scheduler for bt task"
+	default y
+
 config UCLAMP_TASK
 	bool "Enable utilization clamping for RT/FAIR tasks"
 	depends on CPU_FREQ_GOV_SCHEDUTIL

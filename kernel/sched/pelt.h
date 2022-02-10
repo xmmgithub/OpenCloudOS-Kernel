@@ -97,7 +97,10 @@ static inline void update_rq_clock_pelt(struct rq *rq, s64 delta)
 static inline void update_idle_rq_clock_pelt(struct rq *rq)
 {
 	u32 divider = ((LOAD_AVG_MAX - 1024) << SCHED_CAPACITY_SHIFT) - LOAD_AVG_MAX;
-	u32 util_sum = rq->cfs.avg.util_sum;
+	u32 util_sum = rq->cfs[0].avg.util_sum;
+#ifdef CONFIG_SCHED_BT
+	util_sum += rq->cfs[1].avg.util_sum;
+#endif
 	util_sum += rq->avg_rt.util_sum;
 	util_sum += rq->avg_dl.util_sum;
 

@@ -370,9 +370,9 @@ void unregister_sched_domain_sysctl(void)
 #endif /* CONFIG_SMP */
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-static void print_cfs_group_stats(struct seq_file *m, int cpu, struct task_group *tg)
+static void print_cfs_group_stats(struct seq_file *m, int cpu, struct task_group *tg, int isbt)
 {
-	struct sched_entity *se = tg->se[cpu];
+	struct sched_entity *se = tg->se[isbt][cpu];
 
 #define P(F)		SEQ_printf(m, "  .%-30s: %lld\n",	#F, (long long)F)
 #define P_SCHEDSTAT(F)	SEQ_printf(m, "  .%-30s: %lld\n",	#F, (long long)schedstat_val(F))
@@ -499,7 +499,7 @@ static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
 	rcu_read_unlock();
 }
 
-void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
+static void __print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 {
 	s64 MIN_vruntime = -1, min_vruntime, max_vruntime = -1,
 		spread, rq0_min_vruntime, spread0;
@@ -524,7 +524,7 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 	if (last)
 		max_vruntime = last->vruntime;
 	min_vruntime = cfs_rq->min_vruntime;
-	rq0_min_vruntime = cpu_rq(0)->cfs.min_vruntime;
+	rq0_min_vruntime = cpu_rq(0)->cfs[cfs_rq->is_bt].min_vruntime;
 	raw_spin_unlock_irqrestore(&rq->lock, flags);
 	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "MIN_vruntime",
 			SPLIT_NS(MIN_vruntime));
@@ -558,11 +558,27 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 			cfs_rq->removed.util_avg);
 	SEQ_printf(m, "  .%-30s: %ld\n", "removed.runnable_sum",
 			cfs_rq->removed.runnable_sum);
+#endif
+}
+
+void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
+{
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	SEQ_printf(m, "\n");
+	SEQ_printf(m, "cfs_rq[%d]:%s\n", cpu, task_group_path(cfs_rq->tg));
+#else
+	SEQ_printf(m, "\n");
+	SEQ_printf(m, "cfs_rq[%d]:\n", cpu);
+#endif
+
+	__print_cfs_rq(m, cpu, cfs_rq);
+
+#ifdef CONFIG_SMP
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	SEQ_printf(m, "  .%-30s: %lu\n", "tg_load_avg_contrib",
 			cfs_rq->tg_load_avg_contrib);
 	SEQ_printf(m, "  .%-30s: %ld\n", "tg_load_avg",
-			atomic_long_read(&cfs_rq->tg->load_avg));
+			atomic_long_read(&cfs_rq->tg->load_avg[0]));
 #endif
 #endif
 #ifdef CONFIG_CFS_BANDWIDTH
@@ -573,9 +589,33 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 #endif
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-	print_cfs_group_stats(m, cpu, cfs_rq->tg);
+	print_cfs_group_stats(m, cpu, cfs_rq->tg, 0);
 #endif
 }
+
+#ifdef CONFIG_SCHED_BT
+void print_bt_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
+{
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	SEQ_printf(m, "\n");
+	SEQ_printf(m, "bt_rq[%d]:%s\n", cpu, task_group_path(cfs_rq->tg));
+#else
+	SEQ_printf(m, "\n");
+	SEQ_printf(m, "bt_rq[%d]:\n", cpu);
+#endif
+
+	__print_cfs_rq(m, cpu, cfs_rq);
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	SEQ_printf(m, "  .%-30s: %lu\n", "tg_load_avg_contrib",
+			cfs_rq->tg_load_avg_contrib);
+	SEQ_printf(m, "  .%-30s: %ld\n", "tg_load_avg",
+			atomic_long_read(&cfs_rq->tg->load_avg[1]));
+
+	print_cfs_group_stats(m, cpu, cfs_rq->tg, 1);
+#endif
+}
+#endif
 
 void print_rt_rq(struct seq_file *m, int cpu, struct rt_rq *rt_rq)
 {
@@ -660,7 +700,7 @@ do {									\
 	P(nr_switches);
 	P(nr_load_updates);
 	P(nr_uninterruptible);
-	PN(next_balance);
+	PN(next_balance[CFS_INDEX]);
 	SEQ_printf(m, "  .%-30s: %ld\n", "curr->pid", (long)(task_pid_nr(rq->curr)));
 	PN(clock);
 	PN(clock_task);
@@ -669,7 +709,7 @@ do {									\
 
 #ifdef CONFIG_SMP
 #define P64(n) SEQ_printf(m, "  .%-30s: %Ld\n", #n, rq->n);
-	P64(avg_idle);
+	P64(avg_idle[CFS_INDEX]);
 	P64(max_idle_balance_cost);
 #undef P64
 #endif

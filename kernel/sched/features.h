@@ -89,3 +89,7 @@ SCHED_FEAT(WA_BIAS, true)
  * UtilEstimation. Use estimated CPU utilization.
  */
 SCHED_FEAT(UTIL_EST, true)
+
+#ifdef CONFIG_SCHED_BT
+SCHED_FEAT(BT_RUNTIME_SHARE, false)
+#endif

@@ -67,9 +67,15 @@ struct task_struct init_task
 	.stack		= init_stack,
 	.usage		= REFCOUNT_INIT(2),
 	.flags		= PF_KTHREAD,
+#ifdef CONFIG_SCHED_BT
+	.prio		= MAX_PRIO - 20 - 40,
+	.static_prio	= MAX_PRIO - 20 - 40,
+	.normal_prio	= MAX_PRIO - 20 - 40,
+#else
 	.prio		= MAX_PRIO - 20,
 	.static_prio	= MAX_PRIO - 20,
 	.normal_prio	= MAX_PRIO - 20,
+#endif
 	.policy		= SCHED_NORMAL,
 	.cpus_ptr	= &init_task.cpus_mask,
 	.cpus_mask	= CPU_MASK_ALL,
@@ -80,6 +86,7 @@ struct task_struct init_task
 		.fn = do_no_restart_syscall,
 	},
 	.se		= {
+		.is_bt  		= 0, 
 		.group_node 	= LIST_HEAD_INIT(init_task.se.group_node),
 	},
 	.rt		= {

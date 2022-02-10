@@ -84,9 +84,12 @@ static int sched_domain_debug_one(struct sched_domain *sd, int cpu, int level,
 				cpumask_pr_args(group_balance_mask(group)));
 		}
 
-		if (group->sgc->capacity != SCHED_CAPACITY_SCALE)
-			printk(KERN_CONT " cap=%lu", group->sgc->capacity);
-
+		if (group->sgc->capacity[0] != SCHED_CAPACITY_SCALE)
+			printk(KERN_CONT " cap[0]=%lu", group->sgc->capacity[0]);
+#ifdef CONFIG_SCHED_BT
+		if (group->sgc->capacity[1] != SCHED_CAPACITY_SCALE)
+			printk(KERN_CONT " cap[1]=%lu", group->sgc->capacity[1]);
+#endif
 		if (group == sd->groups && sd->child &&
 		    !cpumask_equal(sched_domain_span(sd->child),
 				   sched_group_span(group))) {
@@ -901,7 +904,7 @@ static void init_overlap_sched_group(struct sched_domain *sd,
 	struct cpumask *mask = sched_domains_tmpmask2;
 	struct sd_data *sdd = sd->private;
 	struct cpumask *sg_span;
-	int cpu;
+	int i, cpu;
 
 	build_balance_mask(sd, sg, mask);
 	cpu = cpumask_first_and(sched_group_span(sg), mask);
@@ -918,9 +921,11 @@ static void init_overlap_sched_group(struct sched_domain *sd,
 	 * die on a /0 trap.
 	 */
 	sg_span = sched_group_span(sg);
-	sg->sgc->capacity = SCHED_CAPACITY_SCALE * cpumask_weight(sg_span);
-	sg->sgc->min_capacity = SCHED_CAPACITY_SCALE;
-	sg->sgc->max_capacity = SCHED_CAPACITY_SCALE;
+	for (i = 0; i < CFS_BT; i++) {
+		sg->sgc->capacity[i] = SCHED_CAPACITY_SCALE * cpumask_weight(sg_span);
+		sg->sgc->min_capacity[i] = SCHED_CAPACITY_SCALE;
+		sg->sgc->max_capacity[i] = SCHED_CAPACITY_SCALE;
+	}
 }
 
 static int
@@ -1060,6 +1065,7 @@ static struct sched_group *get_group(int cpu, struct sd_data *sdd)
 	struct sched_domain *child = sd->child;
 	struct sched_group *sg;
 	bool already_visited;
+	int i;
 
 	if (child)
 		cpu = cpumask_first(sched_domain_span(child));
@@ -1084,9 +1090,11 @@ static struct sched_group *get_group(int cpu, struct sd_data *sdd)
 		cpumask_set_cpu(cpu, group_balance_mask(sg));
 	}
 
-	sg->sgc->capacity = SCHED_CAPACITY_SCALE * cpumask_weight(sched_group_span(sg));
-	sg->sgc->min_capacity = SCHED_CAPACITY_SCALE;
-	sg->sgc->max_capacity = SCHED_CAPACITY_SCALE;
+	for (i = 0; i < CFS_BT; i++) {
+		sg->sgc->capacity[i] = SCHED_CAPACITY_SCALE * cpumask_weight(sched_group_span(sg));
+		sg->sgc->min_capacity[i] = SCHED_CAPACITY_SCALE;
+		sg->sgc->max_capacity[i] = SCHED_CAPACITY_SCALE;
+	}
 
 	return sg;
 }
@@ -1153,6 +1161,9 @@ static void init_sched_groups_capacity(int cpu, struct sched_domain *sd)
 	do {
 		int cpu, max_cpu = -1;
 
+#ifdef CONFIG_SCHED_BT
+		sg->balance_cpu = -1;
+#endif
 		sg->group_weight = cpumask_weight(sched_group_span(sg));
 
 		if (!(sd->flags & SD_ASYM_PACKING))
@@ -1173,7 +1184,10 @@ next:
 	if (cpu != group_balance_cpu(sg))
 		return;
 
-	update_group_capacity(sd, cpu);
+	update_group_capacity(sd, cpu, 0);
+#ifdef CONFIG_SCHED_BT
+	update_group_capacity(sd, cpu, 1);
+#endif
 }
 
 /*
@@ -1344,7 +1358,10 @@ sd_init(struct sched_domain_topology_level *tl,
 		.busy_factor		= 32,
 		.imbalance_pct		= 125,
 
-		.cache_nice_tries	= 0,
+		.cache_nice_tries[0]	= 0,
+#ifdef CONFIG_SCHED_BT
+		.cache_nice_tries[1]	= 0,
+#endif
 
 		.flags			= 1*SD_LOAD_BALANCE
 					| 1*SD_BALANCE_NEWIDLE
@@ -1360,8 +1377,12 @@ sd_init(struct sched_domain_topology_level *tl,
 					| sd_flags
 					,
 
-		.last_balance		= jiffies,
-		.balance_interval	= sd_weight,
+		.last_balance[0]		= jiffies,
+		.balance_interval[0]	= sd_weight,
+#ifdef CONFIG_SCHED_BT
+		.last_balance[1]		= jiffies,
+		.balance_interval[1]	= sd_weight,
+#endif
 		.max_newidle_lb_cost	= 0,
 		.next_decay_max_lb_cost	= jiffies,
 		.child			= child,
@@ -1395,12 +1416,16 @@ sd_init(struct sched_domain_topology_level *tl,
 
 	} else if (sd->flags & SD_SHARE_PKG_RESOURCES) {
 		sd->imbalance_pct = 117;
-		sd->cache_nice_tries = 1;
-
+		sd->cache_nice_tries[0] = 1;
+#ifdef CONFIG_SCHED_BT
+		sd->cache_nice_tries[1] = 1;
+#endif
 #ifdef CONFIG_NUMA
 	} else if (sd->flags & SD_NUMA) {
-		sd->cache_nice_tries = 2;
-
+		sd->cache_nice_tries[0] = 2;
+#ifdef CONFIG_SCHED_BT
+		sd->cache_nice_tries[1] = 2;
+#endif
 		sd->flags &= ~SD_PREFER_SIBLING;
 		sd->flags |= SD_SERIALIZE;
 		if (sched_domains_numa_distance[tl->numa_level] > node_reclaim_distance) {
@@ -1411,7 +1436,10 @@ sd_init(struct sched_domain_topology_level *tl,
 
 #endif
 	} else {
-		sd->cache_nice_tries = 1;
+		sd->cache_nice_tries[0] = 1;
+#ifdef CONFIG_SCHED_BT
+		sd->cache_nice_tries[1] = 1;
+#endif
 	}
 
 	/*

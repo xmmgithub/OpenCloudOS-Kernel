@@ -68,6 +68,12 @@ struct sched_domain_shared {
 	int		has_idle_cores;
 };
 
+#ifdef CONFIG_SCHED_BT
+#define Q_NUM (2)
+#else
+#define Q_NUM (1)
+#endif
+
 struct sched_domain {
 	/* These fields must be setup */
 	struct sched_domain __rcu *parent;	/* top domain must be null terminated */
@@ -77,16 +83,16 @@ struct sched_domain {
 	unsigned long max_interval;	/* Maximum balance interval ms */
 	unsigned int busy_factor;	/* less balancing by factor if busy */
 	unsigned int imbalance_pct;	/* No balance until over watermark */
-	unsigned int cache_nice_tries;	/* Leave cache hot tasks for # tries */
+	unsigned int cache_nice_tries[Q_NUM];	/* Leave cache hot tasks for # tries */
 
 	int nohz_idle;			/* NOHZ IDLE status */
 	int flags;			/* See SD_* */
 	int level;
 
 	/* Runtime fields. */
-	unsigned long last_balance;	/* init to jiffies. units in jiffies */
-	unsigned int balance_interval;	/* initialise to 1. units in ms. */
-	unsigned int nr_balance_failed; /* initialise to 0 */
+	unsigned long last_balance[Q_NUM];	/* init to jiffies. units in jiffies */
+	unsigned int balance_interval[Q_NUM];	/* initialise to 1. units in ms. */
+	unsigned int nr_balance_failed[Q_NUM]; /* initialise to 0 */
 
 	/* idle_balance() stats */
 	u64 max_newidle_lb_cost;

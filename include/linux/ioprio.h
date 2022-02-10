@@ -62,7 +62,11 @@ static inline int task_nice_ioprio(struct task_struct *task)
  */
 static inline int task_nice_ioclass(struct task_struct *task)
 {
-	if (task->policy == SCHED_IDLE)
+	if (task->policy == SCHED_IDLE
+#ifdef CONFIG_SCHED_BT
+        || task->policy == SCHED_BT
+#endif
+	   )
 		return IOPRIO_CLASS_IDLE;
 	else if (task_is_realtime(task))
 		return IOPRIO_CLASS_RT;

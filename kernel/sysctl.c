@@ -451,6 +451,22 @@ static struct ctl_table kern_table[] = {
 		.extra2         = SYSCTL_ONE,
 	},
 #endif
+#ifdef CONFIG_SCHED_BT
+	{
+		.procname	= "sched_bt_period_us",
+		.data		= &sysctl_sched_bt_period,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_bt_handler,
+	},
+	{
+		.procname	= "sched_bt_runtime_us",
+		.data		= &sysctl_sched_bt_runtime,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= sched_bt_handler,
+	},
+#endif
 	{
 		.procname	= "sched_child_runs_first",
 		.data		= &sysctl_sched_child_runs_first,

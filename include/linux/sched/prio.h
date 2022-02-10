@@ -22,7 +22,11 @@
 #define MAX_USER_RT_PRIO	100
 #define MAX_RT_PRIO		MAX_USER_RT_PRIO
 
+#ifdef CONFIG_SCHED_BT
+#define MAX_PRIO		(MAX_RT_PRIO + NICE_WIDTH + NICE_WIDTH)
+#else
 #define MAX_PRIO		(MAX_RT_PRIO + NICE_WIDTH)
+#endif
 #define DEFAULT_PRIO		(MAX_RT_PRIO + NICE_WIDTH / 2)
 
 /*
@@ -32,6 +36,16 @@
  */
 #define NICE_TO_PRIO(nice)	((nice) + DEFAULT_PRIO)
 #define PRIO_TO_NICE(prio)	((prio) - DEFAULT_PRIO)
+
+#ifdef CONFIG_SCHED_BT
+/*
+ * Convert user-nice values [ -20 ... 0 ... 19 ]
+ * to static priority [ MIN_BT_PRI + 1 ..MAX_BT_PRIO ],
+ * and back.
+ */
+#define NICE_TO_BT_PRIO(nice)	((nice) + DEFAULT_PRIO + NICE_WIDTH)
+#define PRIO_TO_BT_NICE(prio)	((prio) - DEFAULT_PRIO - NICE_WIDTH)
+#endif
 
 /*
  * 'User priority' is the nice value converted to something we

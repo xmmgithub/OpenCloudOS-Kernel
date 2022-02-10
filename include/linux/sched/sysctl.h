@@ -57,6 +57,11 @@ int sched_proc_update_handler(struct ctl_table *table, int write,
 extern unsigned int sysctl_sched_rt_period;
 extern int sysctl_sched_rt_runtime;
 
+#ifdef CONFIG_SCHED_BT
+extern unsigned int sysctl_sched_bt_period;
+extern int sysctl_sched_bt_runtime;
+#endif
+
 #ifdef CONFIG_UCLAMP_TASK
 extern unsigned int sysctl_sched_uclamp_util_min;
 extern unsigned int sysctl_sched_uclamp_util_max;
@@ -81,6 +86,11 @@ extern int sched_rt_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos);
 
+#ifdef CONFIG_SCHED_BT
+extern int sched_bt_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp,
+		loff_t *ppos);
+#endif
 #ifdef CONFIG_UCLAMP_TASK
 extern int sysctl_sched_uclamp_handler(struct ctl_table *table, int write,
 				       void __user *buffer, size_t *lenp,

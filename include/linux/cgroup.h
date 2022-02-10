@@ -776,6 +776,11 @@ static inline void cgroup_account_cputime(struct task_struct *task,
 {
 	struct cgroup *cgrp;
 
+#ifdef CONFIG_SCHED_BT
+	if (unlikely(task->se.is_bt))
+		return;
+#endif
+
 	cpuacct_charge(task, delta_exec);
 
 	rcu_read_lock();
