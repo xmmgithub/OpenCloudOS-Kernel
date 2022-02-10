@@ -5,7 +5,7 @@ OpenCloudOS-Kernel是OpenCloudOS的内核组件，基于upstream Linux kernel，
 * [支持平台](#支持平台)
 * [主要特性](#主要特性)
 * [通过源代码编译内核rpm包](#通过源代码编译内核rpm包)
-* [容器资源视图隔离(cgroupfs)](#容器资源视图隔离(cgroupfs))
+* [容器资源视图隔离-cgroupfs](#容器资源视图隔离-cgroupfs)
 * [内核新增启动参数](#内核新增启动参数)
 * [sysctl/proc新增&amp;隔离](#sysctlproc新增隔离)
   * [proc新增](#proc新增)
@@ -80,7 +80,7 @@ OpenCloudOS-Kernel是OpenCloudOS的内核组件，基于upstream Linux kernel，
 	
 - debuginfo会包含在kernel-debuginfo包里，内核vmlinux默认释放到/boot目录，模块debuginfo释放到/usr/lib/debug/目录
 
-## 容器资源视图隔离(cgroupfs)
+## 容器资源视图隔离-cgroupfs
 
 由于在docker容器中/proc下数据是通过mount bind host中proc得到的，而内核中proc文件系统大部分没有实现namespace功能，仅有pid和net实现了namespace，因此container中看到的proc诸多统计数据，例如`/proc/meminfo` ,/proc/stat等都是host的全局数据而非container对应的统计数据，这会导致用户在container中使用free，top，或者资源采集时等得到的是错误的数据。为了修正这个问题，使得业务在使用docker容器时可以有途径获得docker自身的统计状态，内核实现了对一些常用数据的隔离。
 
