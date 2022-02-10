@@ -983,6 +983,9 @@ config RELR
 config ARCH_HAS_MEM_ENCRYPT
 	bool
 
+config DYNAMIC_SIGFRAME
+	bool
+
 source "kernel/gcov/Kconfig"
 
 source "scripts/gcc-plugins/Kconfig"

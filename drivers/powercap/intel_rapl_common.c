@@ -96,6 +96,7 @@ struct rapl_defaults {
 	u64 (*compute_time_window)(struct rapl_package *rp, u64 val,
 				    bool to_raw);
 	unsigned int dram_domain_energy_unit;
+	unsigned int psys_domain_energy_unit;
 };
 static struct rapl_defaults *rapl_defaults;
 
@@ -536,12 +537,23 @@ static void rapl_init_domains(struct rapl_package *rp)
 		for (j = 0; j < RAPL_DOMAIN_REG_MAX; j++)
 			rd->regs[j] = rp->priv->regs[i][j];
 
-		if (i == RAPL_DOMAIN_DRAM) {
+		switch (i) {
+		case RAPL_DOMAIN_DRAM:
 			rd->domain_energy_unit =
 			    rapl_defaults->dram_domain_energy_unit;
 			if (rd->domain_energy_unit)
 				pr_info("DRAM domain energy unit %dpj\n",
 					rd->domain_energy_unit);
+			break;
+		case RAPL_DOMAIN_PLATFORM:
+			rd->domain_energy_unit =
+			    rapl_defaults->psys_domain_energy_unit;
+			if (rd->domain_energy_unit)
+				pr_info("Platform domain energy unit %dpj\n",
+					rd->domain_energy_unit);
+			break;
+		default:
+			break;
 		}
 		rd++;
 	}
@@ -922,6 +934,14 @@ static const struct rapl_defaults rapl_defaults_hsw_server = {
 	.dram_domain_energy_unit = 15300,
 };
 
+static const struct rapl_defaults rapl_defaults_spr_server = {
+	.check_unit = rapl_check_unit_core,
+	.set_floor_freq = set_floor_freq_default,
+	.compute_time_window = rapl_compute_time_window_core,
+	.dram_domain_energy_unit = 15300,
+	.psys_domain_energy_unit = 1000000000,
+};
+
 static const struct rapl_defaults rapl_defaults_byt = {
 	.floor_freq_reg_addr = IOSF_CPU_POWER_BUDGET_CTL_BYT,
 	.check_unit = rapl_check_unit_atom,
@@ -978,6 +998,7 @@ static const struct x86_cpu_id rapl_ids[] __initconst = {
 	INTEL_CPU_FAM6(ICELAKE_NNPI, rapl_defaults_core),
 	INTEL_CPU_FAM6(ICELAKE_X, rapl_defaults_hsw_server),
 	INTEL_CPU_FAM6(ICELAKE_D, rapl_defaults_hsw_server),
+	INTEL_CPU_FAM6(SAPPHIRERAPIDS_X, rapl_defaults_spr_server),
 
 	INTEL_CPU_FAM6(ATOM_SILVERMONT, rapl_defaults_byt),
 	INTEL_CPU_FAM6(ATOM_AIRMONT, rapl_defaults_cht),

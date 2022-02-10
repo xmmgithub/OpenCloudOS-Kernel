@@ -95,7 +95,7 @@ static inline int save_xstate_epilog(void __user *buf, int ia32_frame)
 	err = __copy_to_user(&x->i387.sw_reserved, sw_bytes, sizeof(*sw_bytes));
 
 	if (!use_xsave())
-		return err;
+		return !err;
 
 	err |= __put_user(FP_XSTATE_MAGIC2,
 			  (__u32 __user *)(buf + fpu_user_xstate_size));
@@ -170,14 +170,14 @@ int copy_fpstate_to_sigframe(void __user *buf, void __user *buf_fx, int size)
 	ia32_fxstate &= (IS_ENABLED(CONFIG_X86_32) ||
 			 IS_ENABLED(CONFIG_IA32_EMULATION));
 
+	if (!static_cpu_has(X86_FEATURE_FPU)) {
+		struct user_i387_ia32_struct fp;
+		fpregs_soft_get(current, NULL, 0, sizeof(fp), &fp, NULL);
+		return copy_to_user(buf, &fp, sizeof(fp)) ? -EFAULT : 0;
+	}
+
 	if (!access_ok(buf, size))
 		return -EACCES;
-
-	if (!static_cpu_has(X86_FEATURE_FPU))
-		return fpregs_soft_get(current, NULL, 0,
-			sizeof(struct user_i387_ia32_struct), NULL,
-			(struct _fpstate_32 __user *) buf) ? -1 : 1;
-
 retry:
 	/*
 	 * Load the FPU registers if they are not valid for the current task.
@@ -187,7 +187,7 @@ retry:
 	 */
 	fpregs_lock();
 	if (test_thread_flag(TIF_NEED_FPU_LOAD))
-		__fpregs_load_activate();
+		fpregs_restore_userregs();
 
 	pagefault_disable();
 	ret = copy_fpregs_to_sigframe(buf_fx);
@@ -285,7 +285,7 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 			 IS_ENABLED(CONFIG_IA32_EMULATION));
 
 	if (!buf) {
-		fpu__clear(fpu);
+		fpu__clear_user_states(fpu);
 		return 0;
 	}
 
@@ -366,7 +366,7 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 			ret = __copy_from_user(&fpu->state.xsave, buf_fx, state_size);
 
 			if (!ret && state_size > offsetof(struct xregs_state, header))
-				ret = validate_xstate_header(&fpu->state.xsave.header);
+				ret = validate_user_xstate_header(&fpu->state.xsave.header);
 		}
 		if (ret)
 			goto err_out;
@@ -410,7 +410,7 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 
 err_out:
 	if (ret)
-		fpu__clear(fpu);
+		fpu__clear_user_states(fpu);
 	return ret;
 }
 
