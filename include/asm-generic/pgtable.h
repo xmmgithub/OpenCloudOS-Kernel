@@ -912,6 +912,28 @@ static inline int pud_trans_huge(pud_t pud)
 }
 #endif
 
+#ifndef CONFIG_ARCH_HAS_PTE_DMEM
+static inline pmd_t pmd_mkdmem(pmd_t pmd)
+{
+	return pmd;
+}
+
+static inline int pmd_special(pmd_t pmd)
+{
+	return 0;
+}
+
+static inline pud_t pud_mkdmem(pud_t pud)
+{
+	return pud;
+}
+
+static inline int pud_special(pud_t pud)
+{
+	return 0;
+}
+#endif
+
 #ifndef pmd_read_atomic
 static inline pmd_t pmd_read_atomic(pmd_t *pmdp)
 {

@@ -1,0 +1,34 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+#ifndef _LINUX_DMEM_H
+#define _LINUX_DMEM_H
+
+#ifdef CONFIG_DMEM
+int dmem_reserve_init(void);
+void dmem_init(void);
+int dmem_region_register(int node, phys_addr_t start, phys_addr_t end);
+int dmem_alloc_init(unsigned long dpage_shift);
+void dmem_alloc_uinit(void);
+
+phys_addr_t
+dmem_alloc_pages_nodemask(int nid, nodemask_t *nodemask, unsigned int try_max,
+			  unsigned int *result_nr);
+
+phys_addr_t
+dmem_alloc_pages_vma(struct vm_area_struct *vma, unsigned long addr,
+		     unsigned int try_max, unsigned int *result_nr);
+
+void dmem_free_pages(phys_addr_t addr, unsigned int dpages_nr);
+bool is_dmem_pfn(unsigned long pfn);
+#define dmem_free_page(addr)	dmem_free_pages(addr, 1)
+#else
+static inline int dmem_reserve_init(void)
+{
+	return 0;
+}
+
+static inline bool is_dmem_pfn(unsigned long pfn)
+{
+	return 0;
+}
+#endif
+#endif	/* _LINUX_DMEM_H */
