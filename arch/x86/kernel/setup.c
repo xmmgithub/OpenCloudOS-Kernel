@@ -76,9 +76,11 @@
 
 #include <linux/usb/xhci-dbgp.h>
 #include <video/edid.h>
+#include <linux/dmem.h>
 
 #include <asm/mtrr.h>
 #include <asm/apic.h>
+#include <asm/numa.h>
 #include <asm/realmode.h>
 #include <asm/e820/api.h>
 #include <asm/mpspec.h>
@@ -1209,6 +1211,8 @@ void __init setup_arch(char **cmdline_p)
 
 	initmem_init();
 	dma_contiguous_reserve(max_pfn_mapped << PAGE_SHIFT);
+
+	dmem_reserve_init();
 
 	/*
 	 * Reserve memory for crash kernel after SRAT is parsed so that it

@@ -1160,10 +1160,12 @@ static inline unsigned long zap_pmd_range(struct mmu_gather *tlb,
 	pmd = pmd_offset(pud, addr);
 	do {
 		next = pmd_addr_end(addr, end);
-		if (is_swap_pmd(*pmd) || pmd_trans_huge(*pmd) || pmd_devmap(*pmd)) {
-			if (next - addr != HPAGE_PMD_SIZE)
+		if (is_swap_pmd(*pmd) || pmd_trans_huge(*pmd) ||
+			pmd_devmap(*pmd) || pmd_special(*pmd)) {
+			if (next - addr != HPAGE_PMD_SIZE) {
+				VM_BUG_ON(pmd_special(*pmd));
 				__split_huge_pmd(vma, pmd, addr, false, NULL);
-			else if (zap_huge_pmd(tlb, vma, pmd, addr))
+			} else if (zap_huge_pmd(tlb, vma, pmd, addr))
 				goto next;
 			/* fall through */
 		}
@@ -4344,15 +4346,23 @@ int follow_pfn(struct vm_area_struct *vma, unsigned long address,
 	int ret = -EINVAL;
 	spinlock_t *ptl;
 	pte_t *ptep;
+	pmd_t *pmdp = NULL;
 
 	if (!(vma->vm_flags & (VM_IO | VM_PFNMAP)))
 		return ret;
 
-	ret = follow_pte(vma->vm_mm, address, &ptep, &ptl);
+	ret = follow_pte_pmd(vma->vm_mm, address, NULL, &ptep, &pmdp, &ptl);
 	if (ret)
 		return ret;
-	*pfn = pte_pfn(*ptep);
-	pte_unmap_unlock(ptep, ptl);
+
+	if (pmdp) {
+		*pfn = pmd_pfn(*pmdp) + ((address & ~PMD_MASK) >> PAGE_SHIFT);
+		spin_unlock(ptl);
+	} else {
+		*pfn = pte_pfn(*ptep);
+		pte_unmap_unlock(ptep, ptl);
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(follow_pfn);

@@ -160,6 +160,42 @@ static int follow_pfn_pte(struct vm_area_struct *vma, unsigned long address,
 	return -EEXIST;
 }
 
+static struct page *
+follow_special_pmd(struct vm_area_struct *vma, unsigned long address,
+		   pmd_t *pmd, unsigned int flags)
+{
+	spinlock_t *ptl;
+
+	if ((flags & FOLL_DUMP) && is_huge_zero_pmd(*pmd))
+		/* Avoid special (like zero) pages in core dumps */
+		return ERR_PTR(-EFAULT);
+
+	/* No page to get reference */
+	if (flags & FOLL_GET)
+		return ERR_PTR(-EFAULT);
+
+	if (flags & FOLL_TOUCH) {
+		pmd_t _pmd;
+
+		ptl = pmd_lock(vma->vm_mm, pmd);
+		if (!pmd_special(*pmd)) {
+			spin_unlock(ptl);
+			return NULL;
+		}
+		_pmd = pmd_mkyoung(*pmd);
+		if (flags & FOLL_WRITE)
+			_pmd = pmd_mkdirty(_pmd);
+		if (pmdp_set_access_flags(vma, address & HPAGE_PMD_MASK,
+					  pmd, _pmd,
+					  flags & FOLL_WRITE))
+			update_mmu_cache_pmd(vma, address, pmd);
+		spin_unlock(ptl);
+	}
+
+	/* Proper page table entry exists, but no corresponding struct page */
+	return ERR_PTR(-EEXIST);
+}
+
 /*
  * FOLL_FORCE or a forced COW break can write even to unwritable pte's,
  * but only after we've gone through a COW cycle and they are dirty.
@@ -232,8 +268,11 @@ retry:
 			goto no_page;
 	} else if (unlikely(!page)) {
 		if (flags & FOLL_DUMP) {
-			/* Avoid special (like zero) pages in core dumps */
-			page = ERR_PTR(-EFAULT);
+			if (vma_is_dmem(vma))
+				page = ERR_PTR(-EEXIST);
+			else
+				/* Avoid special (like zero) pages in core dumps */
+				page = ERR_PTR(-EFAULT);
 			goto out;
 		}
 
@@ -334,6 +373,12 @@ static struct page *follow_pmd_mask(struct vm_area_struct *vma,
 		return no_page_table(vma, flags);
 	if (pmd_huge(pmdval) && vma->vm_flags & VM_HUGETLB) {
 		page = follow_huge_pmd(mm, address, pmd, flags);
+		if (page)
+			return page;
+		return no_page_table(vma, flags);
+	}
+	if (pmd_special(*pmd)) {
+		page = follow_special_pmd(vma, address, pmd, flags);
 		if (page)
 			return page;
 		return no_page_table(vma, flags);
@@ -2074,6 +2119,10 @@ static int gup_huge_pmd(pmd_t orig, pmd_t *pmdp, unsigned long addr,
 	if (!pmd_access_permitted(orig, flags & FOLL_WRITE))
 		return 0;
 
+	/* Bypass dmem huge pmd. It will be handled in outside routine. */
+	if (pmd_special(orig))
+		return 0;
+
 	if (pmd_devmap(orig)) {
 		if (unlikely(flags & FOLL_LONGTERM))
 			return 0;
@@ -2199,7 +2248,7 @@ static int gup_pmd_range(pud_t *pudp, pud_t pud, unsigned long addr, unsigned lo
 			return 0;
 
 		if (unlikely(pmd_trans_huge(pmd) || pmd_huge(pmd) ||
-			     pmd_devmap(pmd))) {
+			     pmd_devmap(pmd) || pmd_special(pmd))) {
 			/*
 			 * NUMA hinting faults need to be handled in the GUP
 			 * slowpath for accounting purposes and so that they

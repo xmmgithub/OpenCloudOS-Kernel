@@ -10,9 +10,10 @@ int pci_enable_pri(struct pci_dev *pdev, u32 reqs);
 void pci_disable_pri(struct pci_dev *pdev);
 void pci_restore_pri_state(struct pci_dev *pdev);
 int pci_reset_pri(struct pci_dev *pdev);
-
+bool pci_pri_supported(struct pci_dev *pdev);
 #else /* CONFIG_PCI_PRI */
-
+static inline bool pci_pri_supported(struct pci_dev *pdev)
+{ return false; }
 static inline int pci_enable_pri(struct pci_dev *pdev, u32 reqs)
 {
 	return -ENODEV;
