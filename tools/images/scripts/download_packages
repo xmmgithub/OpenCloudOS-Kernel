@@ -1,0 +1,110 @@
+#!/bin/bash
+
+BUILDER="insecure-builder"
+
+# env init
+source $TENCENT_SCRIPTS/env
+
+# check builder
+function check_builder (){
+    docker buildx ls | grep "^$BUILDER *" 2>/dev/null >/dev/null
+    [ $? -ne 0 ] && {
+        docker buildx create --use --name $BUILDER            \
+               --buildkitd-flags "${TENCENT_BUILDKITD_FLAGS}"
+    } || {
+        docker builder prune -f 2>/dev/null >/dev/null
+    }
+}
+
+function docker_build (){
+    local tag="$1"
+    local pkg="$2"
+
+    [ -z "$tag" -o -z "$pkg" ] && return
+
+    docker buildx build -f $TENCENT_DL_DOCKERFILE .    \
+                        --network host --load          \
+                        --allow security.insecure      \
+                        --target tencentrpm --tag $tag \
+                        --build-arg PACKAGE=$pkg       \
+                        --build-arg ARCH=$TENCENT_ARCH \
+                        --build-arg SDK=$TENCENT_SDK_IMAGE
+    fails_exit $?
+}
+
+function docker_copy (){
+    local tag="$1"
+    local tmpdir="$2"
+
+    [ -z "$tag" -o -z "$tmpdir" ] && return
+
+    docker create --name $tag $tag true >/dev/null
+    docker cp $tag:/output/. $tmpdir >/dev/null
+}
+
+function make_markers (){
+    local tmpdir="$1"
+    local dstdir="$2"
+
+    [ -z "$tmpdir" -o -z "$dstdir" ] && return
+
+    mkdir -p $dstdir
+    for rpm in $(ls $tmpdir); do
+        touch $dstdir/${rpm}.txbuild_marker
+    done
+}
+
+function docker_remove (){
+    local tag="$1"
+
+    [ -z "$tag" ] && return
+
+    docker rm --force $tag 2>/dev/null >/dev/null
+    docker rmi --force $tag 2>/dev/null >/dev/null
+}
+
+# rpm download and install
+function download_rpm_package(){
+    local pkg="$1"
+    local tmpdir="$2"
+    local tag="$pkg-$(date +%s)"
+    local statepkg="$TENCENT_STATE_PKG/$pkg"
+
+    # if statepkg is exists, no need to download again
+    [ -d $statepkg ] && return
+
+    docker_build "$tag" "$pkg"
+    docker_copy "$tag" "$tmpdir"
+
+    # get the rpm number
+    if [ $(ls $tmpdir | wc -l) -gt 0 ]; then # rpm > 0
+        make_markers "$tmpdir" "$statepkg"
+        mv $tmpdir/* $TENCENT_RPM_PACKAGES 2>/dev/null
+    fi
+
+    docker_remove "$tag"
+}
+
+function download_rpm_packages(){
+    local rpm_list="$1"
+    local tmpdir="$2"
+
+    for rpmfile in $rpm_list; do
+        script_log "$G download$E $rpmfile package ..\n"
+        download_rpm_package "$rpmfile" "$tmpdir"
+        script_log "$G download$E $rpmfile done\n"
+    done
+}
+
+
+[ ! -e $TENCENT_RPM_FILE ] && {
+    script_log "\n$R Please setup $TENCENT_RPM_FILE$E\n\n"
+    exit 1
+}
+
+check_builder  # check buildx
+
+mkdir -p $TENCENT_TMP_DIR
+rpmlist="$(cat $TENCENT_RPM_FILE)"
+download_rpm_packages "$rpmlist" "$TENCENT_TMP_DIR"
+rm -rf $TENCENT_TMP_DIR

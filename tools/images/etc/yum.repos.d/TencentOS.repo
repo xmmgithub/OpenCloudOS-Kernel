@@ -1,0 +1,108 @@
+# TencentOS.repo
+#
+# Author: TencentOS team <g_APD_SRDC_OS@tencent.com>
+#
+[TencentOS]
+name=TencentOS Server $releasever - TencentOS
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS/$basearch/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS/$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[Updates]
+name=TencentOS Server $releasever - Updates
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/Updates/$basearch/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/Updates/$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[TencentOS-AppStream]
+name=TencentOS Server $releasever - TencentOS-AppStream
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS-AppStream/$basearch/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS-AppStream/$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[TencentOS-testing]
+name=TencentOS Server $releasever - TencentOS-testing
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS-testing/$basearch/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS-testing/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[BaseOS]
+name=TencentOS Server $releasever - Base
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/BaseOS/$basearch/os/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/BaseOS/$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
+
+[AppStream]
+name=TencentOS Server $releasever - AppStream
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/AppStream/$basearch/os/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/AppStream/$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
+
+[cr]
+name=TencentOS Server $releasever - cr
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/cr/$basearch/os/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/cr/$basearch/os/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
+
+#additional packages that may be useful
+[extras]
+name=TencentOS Server $releasever - Extras
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/extras/$basearch/os/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/extras/$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
+
+[PowerTools]
+name=TencentOS Server $releasever - PowerTools
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/PowerTools/$basearch/os/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/PowerTools/$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
+
+[TencentOS-debuginfo]
+name=TencentOS Server $releasever - TencentOS-debuginfo
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS/debuginfo/$basearch/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS/debuginfo/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[Updates-debuginfo]
+name=TencentOS Server $releasever - Updates-debuginfo
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/Updates/debuginfo/$basearch/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/Updates/debuginfo/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[TencentOS-AppStream-debuginfo]
+name=TencentOS Server $releasever - TencentOS-AppStream-debuginfo
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS-AppStream/debuginfo/$basearch/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS-AppStream/debuginfo/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[TencentOS-testing-debuginfo]
+name=TencentOS Server $releasever - TencentOS-testing-debuginfo
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS-testing/debuginfo/$basearch/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS-testing/debuginfo/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3

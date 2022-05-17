@@ -1,0 +1,207 @@
+[config]
+skip_core_tasks = true
+
+[env]
+TENCENT_JOBS = "8"
+TENCENT_NAME = "eksos"
+TENCENT_TARGET = "eks-dev"
+TENCENT_SDK_SITE = "mirrors.tencent.com"
+TENCENT_PRETTY_NAME = "Tencent EKS Instance OS"
+TENCENT_SDK_SUFFIX = { script = ["uname -m | awk '/aarch64/ {print \"-\"$0}'"]}
+TENCENT_BUILDKITD_FLAGS="--allow-insecure-entitlement network.host --allow-insecure-entitlement security.insecure"
+
+# you must generate a ssh-key with ed25519 algorithm
+TENCENT_GIT_SSH_KEY = { script = ["echo -n \"/home/builder/.ssh/builder_ed25519\""] }
+
+# setup arch
+TENCENT_ARCH = { script = ["uname -m"] }
+TENCENT_ARCH2ARCH = { script = ["echo -n \"$(uname -m)-${TENCENT_ARCH}\""] }
+
+# setup build directory
+TENCENT_ROOT_DIR = "${CARGO_MAKE_WORKING_DIRECTORY}"
+TENCENT_BUILD_DIR = "${TENCENT_ROOT_DIR}/build"
+TENCENT_TARGET_DIR = "${TENCENT_BUILD_DIR}/${TENCENT_ARCH}-${TENCENT_TARGET}"
+TENCENT_RPM_PACKAGES = "${TENCENT_TARGET_DIR}/packages"
+TENCENT_STATE_DIR = "${TENCENT_TARGET_DIR}/build"
+TENCENT_IMAGES_DIR = "${TENCENT_TARGET_DIR}/images"
+TENCENT_STATE_PKG = "${TENCENT_STATE_DIR}/packages"
+TENCENT_PACKAGES = "${TENCENT_ROOT_DIR}/packages"
+TENCENT_TMP_DIR = "${TENCENT_ROOT_DIR}/.tmp"
+TENCENT_SCRIPTS = "${TENCENT_ROOT_DIR}/scripts"
+TENCENT_DOCKERFILE = "${TENCENT_ROOT_DIR}/etc/builder/Dockerfile"
+TENCENT_DL_DOCKERFILE = "${TENCENT_ROOT_DIR}/etc/download/Dockerfile"
+TENCENT_RPM_FILE = "${TENCENT_ROOT_DIR}/etc/rpmconfig/${TENCENT_TARGET}-${TENCENT_ARCH}"
+
+TENCENT_TIMESTAMP = { script = ["date +%s"] }
+TENCENT_RELEASE_TOML= "${TENCENT_ROOT_DIR}/Release.toml"
+TENCENT_VERSION_IMAGE = { script = ["awk -F '[ =\"]+' '$1 == \"version\" {print $2}' ${TENCENT_RELEASE_TOML}"] }
+
+# tmp directory
+CARGO_HOME = "${TENCENT_ROOT_DIR}/.cargo"
+GO_MOD_CACHE = "${TENCENT_ROOT_DIR}/.gomodcache"
+
+# tool code
+DOCKER_BUILDKIT = "1"
+TENCENT_TOOLS_DIR = "${TENCENT_ROOT_DIR}/src"
+
+[env.development]
+CARGO_MAKE_CARGO_ARGS = "--jobs ${TENCENT_JOBS} --offline --locked"
+TENCENT_OUTPUT_DIR = "${TENCENT_IMAGES_DIR}/"
+TENCENT_SDK_IMAGE = { script = [ "echo mirrors.tencent.com/tlinux/tlinux3.2${TENCENT_SDK_SUFFIX}"]}
+
+[tasks.init-env]
+script = [
+'''
+case "${TENCENT_ARCH}" in
+    x86_64|aarch64) ;;
+    *)
+        echo "Unrecognized architecture '${TENCENT_ARCH}'; please use 'x86_64 or 'aarch64'"
+        exit 1
+        ;;
+esac
+
+mkdir -p ${GO_MOD_CACHE}
+mkdir -p ${TENCENT_BUILD_DIR}
+mkdir -p ${TENCENT_OUTPUT_DIR}
+mkdir -p ${TENCENT_RPM_PACKAGES}
+mkdir -p ${TENCENT_STATE_DIR}
+mkdir -p ${TENCENT_STATE_PKG}
+'''
+]
+
+[tasks.init-build]
+dependencies = ["init-env"]
+script = [
+'''
+for cmd in docker curl gunzip lz4 cargo cargo-make; do
+    if ! command -v ${cmd} >/dev/null 2>&1 ; then
+        echo "required program '${cmd}' not found" >&2
+        exit 1
+    fi
+done
+'''
+]
+
+[tasks.download-sdk]
+dependencies = ["init-build"]
+script_runner = "bash"
+script = [
+'''
+set -o pipefail
+if ! docker image inspect ${TENCENT_SDK_IMAGE} >/dev/null 2>&1 ; then
+    docker pull ${TENCENT_SDK_IMAGE}
+fi
+'''
+]
+
+[tasks.download-sources]
+dependencies = ["init-env"]
+script_runner = "bash"
+script = [
+'''
+for pkg in packages targets/* src; do
+    [ -d "${pkg}" ] || continue
+    cargo fetch --locked --manifest-path ${pkg}/Cargo.toml
+done
+
+chmod -R o+r ${CARGO_HOME}
+'''
+]
+
+[tasks.download]
+dependencies = [
+    "download-sdk",
+    "download-sources",
+]
+
+[tasks.setup-tools]
+dependencies = ["download"]
+script = [
+'''
+rm -rf ${TENCENT_ROOT_DIR}/bin/txbuild
+cargo install ${CARGO_MAKE_CARGO_ARGS} ${CARGO_BUILD_ARGS} \
+    --path src/txbuild --root ${TENCENT_ROOT_DIR} --force
+'''
+]
+
+[tasks.setup-base]
+dependencies = ["setup-tools"]
+script = "${TENCENT_SCRIPTS}/download_packages"
+
+[tasks.setup-toolchain]
+script = "${TENCENT_SCRIPTS}/setup_toolchain"
+
+[tasks.build-packages]
+dependencies = [
+	"setup-base",
+	"setup-toolchain",
+]
+script = "${TENCENT_SCRIPTS}/build_packages"
+
+[tasks.build-target]
+dependencies = ["build-packages"]
+script = [
+'''
+export PATH="${TENCENT_ROOT_DIR}/bin:${PATH}"
+rm -rf targets/${TENCENT_TARGET}/target
+
+cargo build ${CARGO_MAKE_CARGO_ARGS} ${CARGO_BUILD_ARGS} \
+    --manifest-path targets/${TENCENT_TARGET}/Cargo.toml
+'''
+]
+
+[tasks.clean-sources]
+script_runner = "bash"
+script = [
+'''
+for pkg in targets/* src/txbuild; do
+    [ -d "${pkg}" ] || continue
+    cargo clean --manifest-path ${pkg}/Cargo.toml
+done
+'''
+]
+
+[tasks.clean-packages]
+script_runner = "bash"
+script = [
+'''
+for pkg in packages; do
+    [ -d "${pkg}" ] || continue
+    cargo clean --manifest-path ${pkg}/Cargo.toml
+done
+
+rm -rf ${TENCENT_RPM_PACKAGES}
+'''
+]
+
+[tasks.build-clean]
+dependencies = [
+    "clean-sources",
+    "clean-packages",
+]
+script = [
+'''
+rm -rf .crates2.json
+rm -rf .crates.toml
+rm -rf ${CARGO_HOME}
+rm -rf ${GO_MOD_CACHE}
+rm -rf ${TENCENT_TMP_DIR}
+rm -rf ${TENCENT_BUILD_DIR}
+rm -rf ${TENCENT_ROOT_DIR}/bin
+rm -rf ${TENCENT_ROOT_DIR}/target
+rm -rf ${TENCENT_ROOT_DIR}/*/target
+rm -rf ${TENCENT_TOOLS_DIR}/target
+rm -rf ${TENCENT_TOOLS_DIR}/*/target
+'''
+]
+
+[tasks.build]
+dependencies = [
+    "build-target",
+]
+
+[tasks.clean]
+dependencies = ["build-clean"]
+
+[tasks.default]
+alias = "build"

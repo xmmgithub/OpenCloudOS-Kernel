@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+
+set -x
+set -eu -o pipefail
+shopt -qs failglob
+
+TENCENT_CMDLINE="console=ttyS0,115200 console=tty0 vconsole.keymap=us \
+                 crashkernel=512M-12G:16M,12G-64G:32M,64G-128G:64M,128G-:128M \
+                 vconsole.font=la tarcyrheb-sun16 i8042.noaux net.ifnames=0 audit=0 \
+                 biosdevname=0 intel_idle.max_cstate=1 intel_pstate=disable LANG=C \
+                 systemd.log_target=journal-or-kmsg log_buf_len=1M printk.devkmsg=on"
+
+TENCENT_IMAGE_NAME="${TARGET}-${KERNEL_VERSION}-${VERSION_ID}"
+
+function setup_boot_device(){
+    local bootdisk
+    local rootfs="$1"
+
+    mkdir -p $rootfs/boot/grub2
+    [ "${ARCH}" == "x86_64" ] && {
+        bootdisk="hd0,msdos2"
+    } || {
+        bootdisk="hd1,msdos2"
+    }
+
+    # set grub.cg
+    cat <<EOF > "$rootfs/boot/grub2/grub.cfg"
+set default="0"
+set timeout="10"
+
+menuentry "${PRETTY_NAME} ${VERSION_ID}" {
+    linux ($bootdisk)/boot/vmlinuz root=/dev/vda2 ro $TENCENT_CMDLINE
+    }
+EOF
+}
+
+function install_rootfs_from_repo(){
+    local rootfs="$1"
+    local rpmsdir="$2"
+    local install_pkgs="$3"
+    local dstrepo="$(mktemp -d)"
+
+    # create local dnf repo
+    ln -s $rpmsdir/*.rpm $dstrepo
+    createrepo_c -o $dstrepo -x '*-debuginfo-*.rpm' \
+                 -x '*-debugsource-*.rpm' --no-database $rpmsdir
+
+    # install rpm package
+    for pkg in $install_pkgs; do
+        dnf -y --disablerepo '*' --repofrompath repo,$dstrepo \
+               --enablerepo 'repo' --nogpgcheck --installroot $rootfs \
+               install --setopt install_weak_deps=False $pkg
+    done
+
+    rm -rf $dstrepo 2>/dev/null
+}
+
+function prune_rootfs(){
+    local rootfs="$1"
+    local overlayfs="$2"
+
+    # nopasswd
+    sed -i '/root:/c root::::::::' $rootfs/etc/shadow
+    sed -i '/root:/c root::::::::' $rootfs/etc/shadow-
+
+    # remove unnecessary
+    rm -rf $rootfs/usr/lib/systemd/system/gssproxy.service
+    rm -rf $rootfs/usr/lib/systemd/system/ldconfig.service
+    rm -rf $rootfs/usr/lib/systemd/system/sysinit.target.wants/ldconfig.service
+    rm -rf $rootfs/usr/lib/systemd/system/systemd-update-utmp.service
+    rm -rf $rootfs/usr/lib/systemd/system/sysinit.target.wants/systemd-update-utmp.service
+    rm -rf $rootfs/usr/lib/systemd/system/rpcbind.service
+    rm -rf $rootfs/etc/systemd/system/multi-user.target.wants/rpcbind.service
+
+    # copy new
+    cp $overlayfs/* -a $rootfs/
+}
+
+function setup_startup_device(){
+    local loopdev="$1"
+    local rootfs="$2"
+    local part_idx="$3"
+    local boot_device=""
+    local esp="$(mktemp -d)"
+
+    mkfs.vfat -I -S 512 "${loopdev}p${part_idx}"
+    mount -t vfat "${loopdev}p${part_idx}" $esp
+
+    # set grub.cfg
+    setup_boot_device "$rootfs"
+
+    # if x86 skip efi part, just install boot.img/core.img
+    if [ "${ARCH}" == "x86_64" ]; then
+        grub2-install --modules="normal part_gpt ext2 echo linux"                 \
+                      --target=i386-pc --directory="$rootfs/usr/lib/grub/i386-pc" \
+                      --boot-directory="$rootfs/boot" "$loopdev"
+    else
+        grub2-install --modules="normal part_gpt ext2 echo linux"    \
+                      --target=arm64-efi --efi-directory=$esp        \
+                      --directory="$rootfs/usr/lib64/grub/arm64-efi" \
+                      --boot-directory="$rootfs/boot"                \
+                      --removable
+    fi
+
+    umount $esp
+    rm -rf $esp 2>/dev/null
+}
+
+function setup_rootfs_device(){
+    local loopdev="$1"
+    local rootfs="$2"
+    local part_idx="$3"
+
+    mkfs.ext4 -q -F -b 4096 "${loopdev}p${part_idx}"
+    mount -t ext4 "${loopdev}p${part_idx}" $rootfs
+}
+
+function generate_image (){
+    local disk="$1"
+    local output_dir="$2"
+
+    mkdir -p "$output_dir"
+
+    lz4 -vc "$disk" > "$output_dir/${TENCENT_IMAGE_NAME}.img.lz4"
+    (cd $output_dir;sha256sum ${TENCENT_IMAGE_NAME}.img.lz4 > sha256sum)
+    qemu-img convert -f raw -O qcow2 "$disk" "$output_dir/${TENCENT_IMAGE_NAME}.qcow2"
+    (cd $output_dir;sha256sum ${TENCENT_IMAGE_NAME}.qcow2 > sha256sum.qcow2)
+}
+
+function generate_update(){
+    local loopdev="$1"
+    local part_idx="$2"
+    local output="$3"
+
+    # generate boot partition
+    dd if=${loopdev}p${part_idx} of=${output}/${TENCENT_IMAGE_NAME}-boot.ext4
+}
+
+function setup_loop_device(){
+    local diskfile="$1"
+    local loopdev="$2"
+    local basename=$(basename $loopdev)
+
+    losetup $loopdev $diskfile
+
+    idx=0
+    kpartx -u $loopdev
+    for deviceid in $(lsblk | grep $basename | grep part | awk '{print $2}');do
+        let idx=idx+1
+        mknod ${loopdev}p${idx} b $(echo $deviceid | tr ':' ' ')
+    done
+}
+
+function setup_boot_gap(){
+    local gap_offs
+    local part="$2"
+    local loopdev="$1"
+    local bringup="$3"
+
+    # unit is MiB
+    gap_offs=$(fdisk -l $loopdev | grep ${loopdev}p${part} | awk '{print ($3+1)/2048}')
+    (\
+        echo -n "BOOT:$bringup;"; \
+        echo -n "SUCCESS:0;";     \
+    ) | dd of=$loopdev bs=1M seek=$gap_offs count=1 conv=sync
+}
+
+function create_image() {
+    local repo="$1"
+    local overlay="$2"
+    local output="$3"
+    local pkgs_list="$4"
+    local diskfile="$(mktemp)"
+    local rootfs="$(mktemp -d)"
+    local loopdev=$(losetup -f)
+
+    # create raw image file
+    qemu-img create -q -f raw "$diskfile" 2536M
+
+    # create partition
+    parted "$diskfile" -- mklabel msdos                        # msdos header
+    parted "$diskfile" -- mkpart primary fat16 1MiB 6MiB       # efi partition
+    parted "$diskfile" -- mkpart primary ext4  6MiB 1030MiB    # boota partition
+    parted "$diskfile" -- mkpart primary ext4  1031MiB 2055MiB # bootb partition
+    parted "$diskfile" -- mkpart primary ext4  2056MiB -1MiB   # data  partition
+
+    # associated disk file to loop device
+    setup_loop_device $diskfile $loopdev
+
+    # setup boota partition
+    setup_rootfs_device "$loopdev" "$rootfs" "2"
+
+    # setup boota gap data to up, bootb to down
+    setup_boot_gap "$loopdev" "2" "1"
+    setup_boot_gap "$loopdev" "3" "0"
+
+    # install package to rootfs
+    install_rootfs_from_repo "$rootfs" "$repo" "$pkgs_list"
+    prune_rootfs "$rootfs" "$overlay"
+
+    # setup and init startup partition
+    setup_startup_device "$loopdev" "$rootfs" 1
+
+    # generate raw and qcow image
+    generate_image  "$diskfile" "$output"
+
+    # generate rootfs.ext4
+    generate_update "$loopdev" 2 "$output"
+
+    # clean
+    umount "$rootfs"
+    losetup -d $loopdev
+    rm -rf $rootfs 2>/dev/null
+    rm -rf $diskfile 2>/dev/null
+}
+
+for opt in "$@"; do
+    optarg="$(expr "${opt}" : '[^=]*=\(.*\)')"
+    case "${opt}" in
+        --repo-dir=*) rpms_repo="${optarg}";;
+        --overlayfs=*) overlayfs="${optarg}";;
+        --output-dir=*) output="${optarg}";;
+    esac
+done
+
+create_image "$rpms_repo" "$overlayfs" "$output" "$PACKAGES"

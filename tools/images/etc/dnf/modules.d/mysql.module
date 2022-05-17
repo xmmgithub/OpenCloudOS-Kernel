@@ -1,0 +1,5 @@
+[mysql]
+name=mysql
+stream=8.0
+profiles=
+state=enabled

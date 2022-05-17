@@ -1,0 +1,9 @@
+[package]
+build = "build.rs"
+edition = "2018"
+name = "growpart"
+publish = false
+version = "0.0.0"
+
+[lib]
+path = "pkg.rs"
