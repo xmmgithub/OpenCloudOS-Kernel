@@ -1,0 +1,15 @@
+[package]
+name = "release"
+version = "0.0.0"
+edition = "2018"
+publish = false
+build = "build.rs"
+
+[lib]
+path = "pkg.rs"
+
+[build-dependencies]
+grub = {path = "../grub"}
+growpart = { path = "../growpart" }
+libstd-rust = {path = "../libstd-rust"}
+ca-certificates = { path = "../ca-certificates"}

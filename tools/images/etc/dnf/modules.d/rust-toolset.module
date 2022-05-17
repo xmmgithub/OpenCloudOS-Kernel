@@ -1,0 +1,5 @@
+[rust-toolset]
+name=rust-toolset
+stream=rhel8
+profiles=
+state=enabled

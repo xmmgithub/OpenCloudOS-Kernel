@@ -1,0 +1,11 @@
+#!/bin/bash
+
+BUILD_ARCH="$(uname -m)"
+
+setup_toolchain(){
+    if [ "${TENCENT_ARCH}" != "${BUILD_ARCH}" ];then
+        echo "cross compile, not ready"
+    fi
+}
+
+setup_toolchain

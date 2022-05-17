@@ -1,0 +1,53 @@
+[package]
+build = "build.rs"
+edition = "2018"
+name = "eks-dev"
+version = "1.0.0" # cargo package version
+# Don't rebuild crate just because of changes to README.
+exclude = ["README.md"]
+
+[package.metadata.build-target]
+kernel-version="5.4.119-19" # kernel version
+
+included-packages = [
+  # core component
+  "kernel-5.4.119",
+  "kernel-devel-5.4.119",
+  "kernel-modules-5.4.119",
+  "release",
+  # tool component
+  "findutils",
+  "iptables",
+  "iputils",
+  "readline",
+  "conntrack-tools",
+  "strace",
+  "e2fsprogs",
+  "tcpdump",
+  "htop",
+  "grep",
+  "procps",
+  "iproute",
+  "gawk",
+  "acpid",
+  "vim",
+  "fluent-bit",
+  "tree",
+  "rsyslog",
+  "tar",
+  "passwd",             # passwd command
+  "telnet",
+  "hdparm",
+  "ethtool",
+  "wget",
+  "xz",
+  "lsof",
+  "bzip2",
+  "curl",
+  "traceroute",
+  "cronie",             # crond
+  "psmisc",             # killall
+]
+
+[lib]
+path = "lib.rs"

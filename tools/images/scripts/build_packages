@@ -1,0 +1,63 @@
+#!/bin/bash
+
+PACKAGE_TOML="$TENCENT_PACKAGES/Cargo.toml"
+TARGET_TOML="$TENCENT_ROOT_DIR/targets/${TENCENT_TARGET}/Cargo.toml"
+
+# env init
+source $TENCENT_SCRIPTS/env
+
+# check ssh-agent
+function check_agent (){
+    ssh-add -L >/dev/null 2>/dev/null
+    fails_exit $? 'script_log "\n$R Add ssh-key to ssh-agent$E\n\n"'
+}
+
+function cargo_build (){
+    local exist
+    local pkgid
+    local pkg="$1"
+    local statepkg="$TENCENT_STATE_PKG/$pkg"
+
+    # if statepkg is exists, no need to compile again
+    exist=$(ls $statepkg 2>/dev/null | wc -l)
+    [ -z "$pkg" -o $exist -gt 0 ] && return
+
+    pkgid=$(toml get $TENCENT_PACKAGES/$pkg/Cargo.toml package.name)
+    cargo build ${CARGO_MAKE_CARGO_ARGS} ${CARGO_BUILD_ARGS} \
+          --manifest-path $PACKAGE_TOML --package ${pkgid//\"/}
+    fails_exit $?
+}
+
+function build_package (){
+    local pkg="$1"
+    local members=$(toml get $TARGET_TOML package.metadata.build-target.included-packages)
+
+    [ -z "$pkg" ] && return
+
+    script_log "$G build${E} package $pkg ..\n"
+    if [ "${members/$pkg/}" != "$members" ]; then
+        cargo_build "${pkg//\"/}"
+    fi
+    script_log "$G build$E package $pkg done\n"
+}
+
+function build_packages (){
+    local index=0
+
+    while true; do
+        package="$(toml get $PACKAGE_TOML workspace.members[$index])"
+        if [ "$package" == "null" ];then
+            break
+        fi
+        build_package $package
+        let index=index+1
+    done
+}
+
+check_agent
+# build and install pkg in packages
+if [ -z "$PACKAGE" ]; then
+    build_packages
+else
+    build_package "\"$PACKAGE\""
+fi

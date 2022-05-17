@@ -1,0 +1,24 @@
+#!/bin/bash
+
+E="\e[0m"
+R="   \e[33;31m"
+G="    \e[40;32m"
+
+export PATH="${TENCENT_ROOT_DIR}/bin:${PATH}"
+
+function fails_exit (){
+    local exit_code="$1"
+    local exit_hook_fn="$2"
+
+    shift 2
+    [ $exit_code -ne 0 ] && {
+        [ -n "$exit_hook_fn" ] && {
+            eval $exit_hook_fn
+        }
+        exit $exit_code
+    }
+}
+
+function script_log (){
+    printf "$@"
+}

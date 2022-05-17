@@ -1,0 +1,34 @@
+#!/bin/bash
+
+action="$1"
+rootfs="$2"
+DOCKER_IMAGE=eks-rootfs
+
+[ "$action" != "start" -a "$action" != "stop" ] && {
+    echo "$0 [start|stop] [rootfs.tar]"
+    exit
+}
+
+[ -z "$rootfs" -a "$action" == "start" ] && {
+    echo "$0 start rootfs.tar"
+    exit
+}
+
+start () {
+    docker import $rootfs $DOCKER_IMAGE
+    docker run -it  --privileged $DOCKER_IMAGE /sbin/init
+}
+
+stop (){
+    id=$(docker ps -a | grep $DOCKER_IMAGE | awk '{print $1}')
+    [ -n "$id" ] && {
+        docker kill $id
+        docker rm $id
+        docker rmi $DOCKER_IMAGE
+    }
+}
+
+case $action in
+"start") start;;
+"stop") stop;;
+esac

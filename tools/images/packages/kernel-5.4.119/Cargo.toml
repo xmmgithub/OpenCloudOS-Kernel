@@ -1,0 +1,12 @@
+[package]
+name = "kernel-5_4_119"
+version = "0.1.0"
+edition = "2018"
+publish = false
+build = "build.rs"
+
+[package.metadata.build-package]
+package-name = "kernel-5.4.119"
+
+[lib]
+path = "pkg.rs"
