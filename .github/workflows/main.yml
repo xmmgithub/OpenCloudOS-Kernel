@@ -23,4 +23,4 @@ jobs:
           
       # Check the license of files
       - name: Check the license
-        run: python ./package/default/check_license.py
+        run: python ./package/default/license_check.py
