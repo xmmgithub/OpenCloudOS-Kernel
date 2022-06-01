@@ -2699,7 +2699,9 @@ unsigned int sysctl_allow_memcg_migrate_ignore_blkio_bind;
 int cgroup_migrate_prepare_dst(struct cgroup_mgctx *mgctx)
 {
 	struct css_set *src_cset, *tmp_cset;
+#ifdef CONFIG_MEMCG
 	struct cgroup_subsys_state *css;
+#endif
 
 	lockdep_assert_held(&cgroup_mutex);
 
@@ -2716,6 +2718,7 @@ int cgroup_migrate_prepare_dst(struct cgroup_mgctx *mgctx)
 
 		WARN_ON_ONCE(src_cset->mg_dst_cset || dst_cset->mg_dst_cset);
 
+#ifdef CONFIG_MEMCG
 		css = dst_cset->subsys[memory_cgrp_id];
 		if (!sysctl_allow_memcg_migrate_ignore_blkio_bind && css) {
 			struct mem_cgroup *memcg = mem_cgroup_from_css(css);
@@ -2727,6 +2730,7 @@ int cgroup_migrate_prepare_dst(struct cgroup_mgctx *mgctx)
 				return -EPERM;
 			}
 		}
+#endif
 
 		/*
 		 * If src cset equals dst, it's noop.  Drop the src.

@@ -317,6 +317,7 @@ static char *get_longterm_name(enum sli_longterm_event sidx)
 	return name;
 }
 
+#ifdef CONFIG_MEMCG
 static u64 sli_memlat_stat_gather(struct cgroup *cgrp,
 				 enum sli_memlat_stat_item sidx,
 				 enum sli_lat_count cidx)
@@ -435,6 +436,7 @@ void sli_memlat_stat_end(enum sli_memlat_stat_item sidx, u64 start)
 out:
 	rcu_read_unlock();
 }
+#endif
 
 void sli_schedlat_stat(struct task_struct *task, enum sli_schedlat_stat_item sidx, u64 delta)
 {

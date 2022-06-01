@@ -4281,6 +4281,7 @@ out:
 	return nr_locked_zones;
 }
 
+#ifdef CONFIG_MEMCG
 /*
  * Function to shrink the page cache
  *
@@ -4390,6 +4391,12 @@ out:
 
 	return sc.nr_reclaimed;
 }
+#else /* CONFIG_MEMCG */
+static unsigned long __shrink_page_cache(gfp_t mask, struct mem_cgroup *memcg, unsigned long nr_pages)
+{
+	return 0;
+}
+#endif
 
 static int kpagecache_limitd(void *data)
 {
