@@ -85,14 +85,6 @@ extern grub_ieee1275_ihandle_t EXPORT_VAR(grub_ieee1275_mmu);
 
 extern int (* EXPORT_VAR(grub_ieee1275_entry_fn)) (void *) GRUB_IEEE1275_ENTRY_FN_ATTRIBUTE;
 
-/* Static heap, used only if FORCE_CLAIM is set,
-   happens on Open Hack'Ware. Should be in platform-specific
-   header but is used only on PPC anyway.
-*/
-#define GRUB_IEEE1275_STATIC_HEAP_START 0x1000000
-#define GRUB_IEEE1275_STATIC_HEAP_LEN   0x1000000
-
-
 enum grub_ieee1275_flag
 {
   /* Old World Macintosh firmware fails seek when "dev:0" is opened.  */
@@ -113,25 +105,13 @@ enum grub_ieee1275_flag
   /* OLPC / XO firmware hangs when accessing USB devices.  */
   GRUB_IEEE1275_FLAG_OFDISK_SDCARD_ONLY,
 
-  /* Open Hack'Ware stops when trying to set colors */
-  GRUB_IEEE1275_FLAG_CANNOT_SET_COLORS,
-
-  /* Open Hack'Ware stops when grub_ieee1275_interpret is used.  */
-  GRUB_IEEE1275_FLAG_CANNOT_INTERPRET,
-
-  /* Open Hack'Ware has no memory map, just claim what we need.  */
-  GRUB_IEEE1275_FLAG_FORCE_CLAIM,
-
-  /* Open Hack'Ware don't support the ANSI sequence.  */
-  GRUB_IEEE1275_FLAG_NO_ANSI,
-
   /* OpenFirmware hangs on qemu if one requests any memory below 1.5 MiB.  */
   GRUB_IEEE1275_FLAG_NO_PRE1_5M_CLAIM,
 
   /* OLPC / XO firmware has the cursor ON/OFF routines.  */
   GRUB_IEEE1275_FLAG_HAS_CURSORONOFF,
 
-  /* Some PowerMacs claim to use 2 address cells but in fact use only 1. 
+  /* Some PowerMacs claim to use 2 address cells but in fact use only 1.
      Other PowerMacs claim to use only 1 and really do so. Always assume
      1 address cell is used on PowerMacs.
    */
@@ -147,7 +127,7 @@ enum grub_ieee1275_flag
 
   GRUB_IEEE1275_FLAG_CURSORONOFF_ANSI_BROKEN,
 
-  GRUB_IEEE1275_FLAG_DISABLE_VIDEO_SUPPORT
+  GRUB_IEEE1275_FLAG_RAW_DEVNAMES,
 };
 
 extern int EXPORT_FUNC(grub_ieee1275_test_flag) (enum grub_ieee1275_flag flag);
@@ -254,8 +234,6 @@ int EXPORT_FUNC(grub_ieee1275_devalias_next) (struct grub_ieee1275_devalias *ali
 void EXPORT_FUNC(grub_ieee1275_children_peer) (struct grub_ieee1275_devalias *alias);
 void EXPORT_FUNC(grub_ieee1275_children_first) (const char *devpath,
 						struct grub_ieee1275_devalias *alias);
-int EXPORT_FUNC(grub_ieee1275_cas_reboot) (char *script);
-int EXPORT_FUNC(grub_ieee1275_set_boot_last_label) (const char *text);
 
 char *EXPORT_FUNC(grub_ieee1275_get_boot_dev) (void);
 

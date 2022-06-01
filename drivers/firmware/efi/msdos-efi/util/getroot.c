@@ -153,35 +153,16 @@ convert_system_partition_to_system_disk (const char *os_dev, int *is_part)
 {
 #if GRUB_UTIL_FD_STAT_IS_FUNCTIONAL
   struct stat st;
-  char *path = xmalloc(PATH_MAX);
 
   if (stat (os_dev, &st) < 0)
     {
-      const char *errstr = strerror (errno); 
+      const char *errstr = strerror (errno);
       grub_error (GRUB_ERR_BAD_DEVICE, N_("cannot stat `%s': %s"),
 		  os_dev, errstr);
       grub_util_info (_("cannot stat `%s': %s"), os_dev, errstr);
       return 0;
     }
 
-  *is_part = 0;
-
-  if (realpath(os_dev, path))
-    {
-      if ((strncmp ("/dev/nvme", path, 9) == 0))
-	{
-	  char *p = path + 5;
-	  p = strchr(p, 'p');
-	  if (p)
-	    {
-	      *is_part = 1;
-	      *p = '\0';
-	    }
-	  return path;
-	}
-    }
-
-  grub_free (path);
   *is_part = 0;
 
   if (grub_util_device_is_mapped_stat (&st))
@@ -219,7 +200,7 @@ make_device_name (const char *drive)
   char *ret, *ptr;
   const char *iptr;
 
-  ret = xmalloc (strlen (drive) * 2);
+  ret = xcalloc (2, strlen (drive));
   ptr = ret;
   for (iptr = drive; *iptr; iptr++)
     {
@@ -312,7 +293,7 @@ grub_util_biosdisk_get_grub_dev (const char *os_dev)
 		 == 0);
 
     dri = make_device_name (drive);
- 
+
     if (!disk && !rdisk)
       return dri;
 
@@ -470,7 +451,7 @@ int
 grub_util_biosdisk_is_present (const char *os_dev)
 {
   int ret = (find_system_device (os_dev) != NULL);
-  grub_util_info ((ret ? "%s is present" : "%s is not present"), 
+  grub_util_info ((ret ? "%s is present" : "%s is not present"),
 		  os_dev);
   return ret;
 }

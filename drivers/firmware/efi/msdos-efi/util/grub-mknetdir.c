@@ -32,15 +32,13 @@
 
 static char *rootdir = NULL, *subdir = NULL;
 static char *debug_image = NULL;
-static char efi_netfs = 0;
 
 enum
   {
     OPTION_NET_DIRECTORY = 0x301,
     OPTION_SUBDIR,
     OPTION_DEBUG,
-    OPTION_DEBUG_IMAGE,
-    OPTION_DEBUG_EFI_NETFS
+    OPTION_DEBUG_IMAGE
   };
 
 static struct argp_option options[] = {
@@ -51,11 +49,10 @@ static struct argp_option options[] = {
    0, N_("relative subdirectory on network server"), 2},
   {"debug", OPTION_DEBUG, 0, OPTION_HIDDEN, 0, 2},
   {"debug-image", OPTION_DEBUG_IMAGE, N_("STRING"), OPTION_HIDDEN, 0, 2},
-  {"debug-efi-netfs", OPTION_DEBUG_EFI_NETFS, 0, OPTION_HIDDEN, 0, 2},
   {0, 0, 0, 0, 0, 0}
 };
 
-static error_t 
+static error_t
 argp_parser (int key, char *arg, struct argp_state *state)
 {
   if (grub_install_parse (key, arg))
@@ -69,9 +66,6 @@ argp_parser (int key, char *arg, struct argp_state *state)
     case OPTION_SUBDIR:
       free (subdir);
       subdir = xstrdup (arg);
-      return 0;
-    case OPTION_DEBUG_EFI_NETFS:
-      efi_netfs = 1;
       return 0;
       /* This is an undocumented feature...  */
     case OPTION_DEBUG:
@@ -88,16 +82,17 @@ argp_parser (int key, char *arg, struct argp_state *state)
     }
 }
 
+
 struct argp argp = {
   options, argp_parser, NULL,
   "\v"N_("Prepares GRUB network boot images at net_directory/subdir "
-	 "assuming net_directory being TFTP root."), 
+	 "assuming net_directory being TFTP root."),
   NULL, grub_install_help_filter, NULL
 };
 
 static char *base;
 
-static struct
+static const struct
 {
   const char *mkimage_target;
   const char *netmodule;
@@ -112,7 +107,9 @@ static struct
     [GRUB_INSTALL_PLATFORM_X86_64_EFI] = { "x86_64-efi", "efinet", ".efi" },
     [GRUB_INSTALL_PLATFORM_IA64_EFI] = { "ia64-efi", "efinet", ".efi" },
     [GRUB_INSTALL_PLATFORM_ARM_EFI] = { "arm-efi", "efinet", ".efi" },
-    [GRUB_INSTALL_PLATFORM_ARM64_EFI] = { "arm64-efi", "efinet", ".efi" }
+    [GRUB_INSTALL_PLATFORM_ARM64_EFI] = { "arm64-efi", "efinet", ".efi" },
+    [GRUB_INSTALL_PLATFORM_RISCV32_EFI] = { "riscv32-efi", "efinet", ".efi" },
+    [GRUB_INSTALL_PLATFORM_RISCV64_EFI] = { "riscv64-efi", "efinet", ".efi" },
   };
 
 static void
@@ -159,10 +156,12 @@ process_input_dir (const char *input_dir, enum grub_install_plat platform)
   grub_install_push_module (targets[platform].netmodule);
 
   output = grub_util_path_concat_ext (2, grubdir, "core", targets[platform].ext);
-
   grub_install_make_image_wrap (input_dir, prefix, output,
 				0, load_cfg,
 				targets[platform].mkimage_target, 0);
+
+  grub_set_install_backup_ponr ();
+
   grub_install_pop_module ();
 
   /* TRANSLATORS: First %s is replaced by platform name. Second one by filename.  */
@@ -196,16 +195,7 @@ main (int argc, char *argv[])
 
   grub_install_mkdir_p (base);
 
-  if (!efi_netfs)
-    {
-      grub_install_push_module ("tftp");
-      grub_install_push_module ("http");
-    }
-  else
-    {
-      targets[GRUB_INSTALL_PLATFORM_I386_EFI].netmodule = "efi_netfs";
-      targets[GRUB_INSTALL_PLATFORM_X86_64_EFI].netmodule = "efi_netfs";
-    }
+  grub_install_push_module ("tftp");
 
   if (!grub_install_source_directory)
     {

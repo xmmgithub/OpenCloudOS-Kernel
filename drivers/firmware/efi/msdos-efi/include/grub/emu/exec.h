@@ -23,8 +23,6 @@
 #include <stdarg.h>
 
 #include <sys/types.h>
-#include <grub/symbol.h>
-
 pid_t
 grub_util_exec_pipe (const char *const *argv, int *fd);
 pid_t
@@ -34,7 +32,7 @@ int
 grub_util_exec_redirect_all (const char *const *argv, const char *stdin_file,
 			     const char *stdout_file, const char *stderr_file);
 int
-EXPORT_FUNC(grub_util_exec) (const char *const *argv);
+grub_util_exec (const char *const *argv);
 int
 grub_util_exec_redirect (const char *const *argv, const char *stdin_file,
 			 const char *stdout_file);

@@ -59,7 +59,7 @@ grub_install_help_filter (int key, const char *text,
       return xasprintf(text, "unicode");
     case GRUB_INSTALL_OPTIONS_DIRECTORY:
     case GRUB_INSTALL_OPTIONS_DIRECTORY2:
-      return xasprintf(text, grub_util_get_pkglibdir ());      
+      return xasprintf(text, grub_util_get_pkglibdir ());
     case GRUB_INSTALL_OPTIONS_LOCALE_DIRECTORY:
       return xasprintf(text, grub_util_get_localedir ());
     case GRUB_INSTALL_OPTIONS_THEMES_DIRECTORY:
@@ -80,7 +80,7 @@ grub_install_copy_file (const char *src,
 			const char *dst,
 			int is_needed)
 {
-  grub_util_fd_t in, out;  
+  grub_util_fd_t in, out;
   ssize_t r;
 
   grub_util_info ("copying `%s' -> `%s'", src, dst);
@@ -106,17 +106,22 @@ grub_install_copy_file (const char *src,
 
   if (!grub_install_copy_buffer)
     grub_install_copy_buffer = xmalloc (GRUB_INSTALL_COPY_BUFFER_SIZE);
- 
+
   while (1)
     {
       r = grub_util_fd_read (in, grub_install_copy_buffer, GRUB_INSTALL_COPY_BUFFER_SIZE);
       if (r <= 0)
 	break;
-      grub_util_fd_write (out, grub_install_copy_buffer, r);
+      r = grub_util_fd_write (out, grub_install_copy_buffer, r);
+      if (r <= 0)
+	break;
     }
-  grub_util_fd_sync (out);
-  grub_util_fd_close (in);
-  grub_util_fd_close (out);
+  if (grub_util_fd_sync (out) < 0)
+    r = -1;
+  if (grub_util_fd_close (in) < 0)
+    r = -1;
+  if (grub_util_fd_close (out) < 0)
+    r = -1;
 
   if (r < 0)
     grub_util_error (_("cannot copy `%s' to `%s': %s"),
@@ -180,36 +185,162 @@ grub_install_mkdir_p (const char *dst)
   free (t);
 }
 
+static int
+strcmp_ext (const char *a, const char *b, const char *ext)
+{
+  char *bsuffix = grub_util_path_concat_ext (1, b, ext);
+  int r = strcmp (a, bsuffix);
+
+  free (bsuffix);
+  return r;
+}
+
+enum clean_grub_dir_mode
+{
+  CLEAN_NEW,
+  CLEAN_BACKUP,
+  CREATE_BACKUP,
+  RESTORE_BACKUP
+};
+
+#ifdef HAVE_ATEXIT
+static size_t backup_dirs_size = 0;
+static char **backup_dirs = NULL;
+static pid_t backup_process = 0;
+static int grub_install_backup_ponr = 0;
+
+void
+grub_set_install_backup_ponr (void)
+{
+  grub_install_backup_ponr = 1;
+}
+#endif
+
 static void
-clean_grub_dir (const char *di)
+clean_grub_dir_real (const char *di, enum clean_grub_dir_mode mode)
 {
   grub_util_fd_dir_t d;
   grub_util_fd_dirent_t de;
+  const char *suffix = "";
+
+  if ((mode == CLEAN_BACKUP) || (mode == RESTORE_BACKUP))
+    suffix = "~";
 
   d = grub_util_fd_opendir (di);
   if (!d)
-    grub_util_error (_("cannot open directory `%s': %s"),
-		     di, grub_util_fd_strerror ());
+    {
+      if (mode == CLEAN_BACKUP)
+	return;
+      grub_util_error (_("cannot open directory `%s': %s"),
+		       di, grub_util_fd_strerror ());
+    }
 
   while ((de = grub_util_fd_readdir (d)))
     {
       const char *ext = strrchr (de->d_name, '.');
-      if ((ext && (strcmp (ext, ".mod") == 0
-		   || strcmp (ext, ".lst") == 0
-		   || strcmp (ext, ".img") == 0
-		   || strcmp (ext, ".mo") == 0)
-	   && strcmp (de->d_name, "menu.lst") != 0)
-	  || strcmp (de->d_name, "efiemu32.o") == 0
-	  || strcmp (de->d_name, "efiemu64.o") == 0)
+
+      if ((ext && (strcmp_ext (ext, ".mod", suffix) == 0
+		   || strcmp_ext (ext, ".lst", suffix) == 0
+		   || strcmp_ext (ext, ".img", suffix) == 0
+		   || strcmp_ext (ext, ".efi", suffix) == 0
+		   || strcmp_ext (ext, ".mo", suffix) == 0)
+	   && strcmp_ext (de->d_name, "menu.lst", suffix) != 0)
+	  || strcmp_ext (de->d_name, "modinfo.sh", suffix) == 0
+	  || strcmp_ext (de->d_name, "efiemu32.o", suffix) == 0
+	  || strcmp_ext (de->d_name, "efiemu64.o", suffix) == 0)
 	{
-	  char *x = grub_util_path_concat (2, di, de->d_name);
-	  if (grub_util_unlink (x) < 0)
-	    grub_util_error (_("cannot delete `%s': %s"), x,
-			     grub_util_fd_strerror ());
-	  free (x);
+	  char *srcf = grub_util_path_concat (2, di, de->d_name);
+
+	  if (mode == CREATE_BACKUP)
+	    {
+	      char *dstf = grub_util_path_concat_ext (2, di, de->d_name, "~");
+
+	      if (grub_util_rename (srcf, dstf) < 0)
+		grub_util_error (_("cannot backup `%s': %s"), srcf,
+				 grub_util_fd_strerror ());
+	      free (dstf);
+	    }
+	  else if (mode == RESTORE_BACKUP)
+	    {
+	      char *dstf = grub_util_path_concat (2, di, de->d_name);
+
+	      dstf[strlen (dstf) - 1] = '\0';
+	      if (grub_util_rename (srcf, dstf) < 0)
+		grub_util_error (_("cannot restore `%s': %s"), dstf,
+				 grub_util_fd_strerror ());
+	      free (dstf);
+	    }
+	  else
+	    {
+	      if (grub_util_unlink (srcf) < 0)
+		grub_util_error (_("cannot delete `%s': %s"), srcf,
+				 grub_util_fd_strerror ());
+	    }
+	  free (srcf);
 	}
     }
   grub_util_fd_closedir (d);
+}
+
+#ifdef HAVE_ATEXIT
+static void
+restore_backup_atexit (void)
+{
+  size_t i;
+
+  /*
+   * Some child inherited atexit() handler, did not clear it, and called it.
+   * Thus skip clean or restore logic.
+   */
+  if (backup_process != getpid ())
+    return;
+
+  for (i = 0; i < backup_dirs_size; i++)
+    {
+      /*
+       * If past point of no return simply clean the backups. Otherwise
+       * cleanup newly installed files, and restore the backups.
+       */
+      if (grub_install_backup_ponr)
+	clean_grub_dir_real (backup_dirs[i], CLEAN_BACKUP);
+      else
+	{
+	  clean_grub_dir_real (backup_dirs[i], CLEAN_NEW);
+	  clean_grub_dir_real (backup_dirs[i], RESTORE_BACKUP);
+	}
+      free (backup_dirs[i]);
+    }
+
+  backup_dirs_size = 0;
+
+  free (backup_dirs);
+}
+
+static void
+append_to_backup_dirs (const char *dir)
+{
+  backup_dirs = xrealloc (backup_dirs, sizeof (char *) * (backup_dirs_size + 1));
+  backup_dirs[backup_dirs_size] = xstrdup (dir);
+  backup_dirs_size++;
+  if (!backup_process)
+    {
+      atexit (restore_backup_atexit);
+      backup_process = getpid ();
+    }
+}
+#else
+static void
+append_to_backup_dirs (const char *dir __attribute__ ((unused)))
+{
+}
+#endif
+
+static void
+clean_grub_dir (const char *di)
+{
+  clean_grub_dir_real (di, CLEAN_BACKUP);
+  clean_grub_dir_real (di, CREATE_BACKUP);
+  append_to_backup_dirs (di);
 }
 
 struct install_list
@@ -228,6 +359,31 @@ struct install_list install_themes = { 1, 0, 0, 0 };
 char *grub_install_source_directory = NULL;
 char *grub_install_locale_directory = NULL;
 char *grub_install_themes_directory = NULL;
+
+int
+grub_install_is_short_mbrgap_supported (void)
+{
+  int i, j;
+  static const char *whitelist[] =
+    {
+     "part_msdos", "biosdisk", "affs", "afs", "bfs", "archelp",
+     "cpio", "cpio_be", "newc", "odc", "ext2", "fat", "exfat",
+     "f2fs", "fshelp", "hfs", "hfsplus", "iso9660", "jfs", "minix",
+     "minix2", "minix3", "minix_be", "minix2_be", "nilfs2", "ntfs",
+     "ntfscomp", "reiserfs", "romfs", "sfs", "tar", "udf", "ufs1",
+     "ufs1_be", "ufs2", "xfs"
+    };
+
+  for (i = 0; i < modules.n_entries; i++) {
+    for (j = 0; j < ARRAY_SIZE (whitelist); j++)
+      if (strcmp(modules.entries[i], whitelist[j]) == 0)
+	break;
+    if (j == ARRAY_SIZE (whitelist))
+      return 0;
+  }
+
+  return 1;
+}
 
 void
 grub_install_push_module (const char *val)
@@ -281,7 +437,7 @@ handle_install_list (struct install_list *il, const char *val,
       il->n_entries++;
     }
   il->n_alloc = il->n_entries + 1;
-  il->entries = xmalloc (il->n_alloc * sizeof (il->entries[0]));
+  il->entries = xcalloc (il->n_alloc, sizeof (il->entries[0]));
   ptr = val;
   for (ce = il->entries; ; ce++)
     {
@@ -302,6 +458,8 @@ handle_install_list (struct install_list *il, const char *val,
 
 static char **pubkeys;
 static size_t npubkeys;
+static char *sbat;
+static int disable_shim_lock;
 static grub_compression_t compression;
 
 int
@@ -331,6 +489,15 @@ grub_install_parse (int key, char *arg)
 			  sizeof (pubkeys[0])
 			  * (npubkeys + 1));
       pubkeys[npubkeys++] = xstrdup (arg);
+      return 1;
+    case GRUB_INSTALL_OPTIONS_SBAT:
+      if (sbat)
+	free (sbat);
+
+      sbat = xstrdup (arg);
+      return 1;
+    case GRUB_INSTALL_OPTIONS_DISABLE_SHIM_LOCK:
+      disable_shim_lock = 1;
       return 1;
 
     case GRUB_INSTALL_OPTIONS_VERBOSITY:
@@ -432,7 +599,7 @@ grub_install_make_image_wrap_file (const char *dir, const char *prefix,
 				   const char *mkimage_target, int note)
 {
   const struct grub_install_image_target_desc *tgt;
-  const char *const compnames[] = 
+  const char *const compnames[] =
     {
       [GRUB_COMPRESSION_AUTO] = "auto",
       [GRUB_COMPRESSION_NONE] = "none",
@@ -493,10 +660,12 @@ grub_install_make_image_wrap_file (const char *dir, const char *prefix,
   grub_util_info ("grub-mkimage --directory '%s' --prefix '%s'"
 		  " --output '%s' "
 		  " --dtb '%s' "
-		  "--format '%s' --compression '%s' %s %s\n",
+		  "--sbat '%s' "
+		  "--format '%s' --compression '%s' %s %s %s\n",
 		  dir, prefix,
-		  outname, dtb ? : "", mkimage_target,
-		  compnames[compression], note ? "--note" : "", s);
+		  outname, dtb ? : "", sbat ? : "", mkimage_target,
+		  compnames[compression], note ? "--note" : "",
+		  disable_shim_lock ? "--disable-shim-lock" : "", s);
   free (s);
 
   tgt = grub_install_get_image_target (mkimage_target);
@@ -506,7 +675,8 @@ grub_install_make_image_wrap_file (const char *dir, const char *prefix,
   grub_install_generate_image (dir, prefix, fp, outname,
 			       modules.entries, memdisk_path,
 			       pubkeys, npubkeys, config_path, tgt,
-			       note, compression, dtb);
+			       note, compression, dtb, sbat,
+			       disable_shim_lock);
   while (dc--)
     grub_install_pop_module ();
 }
@@ -526,7 +696,8 @@ grub_install_make_image_wrap (const char *dir, const char *prefix,
   grub_install_make_image_wrap_file (dir, prefix, fp, outname,
 				     memdisk_path, config_path,
 				     mkimage_target, note);
-  grub_util_file_sync (fp);
+  if (grub_util_file_sync (fp) < 0)
+    grub_util_error (_("cannot sync `%s': %s"), outname, strerror (errno));
   fclose (fp);
 }
 
@@ -583,7 +754,10 @@ copy_all (const char *srcd,
       srcf = grub_util_path_concat (2, srcd, de->d_name);
       if (grub_util_is_special_file (srcf)
 	  || grub_util_is_directory (srcf))
-	continue;
+	{
+	  free (srcf);
+	  continue;
+	}
       dstf = grub_util_path_concat (2, dstd, de->d_name);
       grub_install_compress_file (srcf, dstf, 1);
       free (srcf);
@@ -592,7 +766,7 @@ copy_all (const char *srcd,
   grub_util_fd_closedir (d);
 }
 
-#if !(defined (GRUB_UTIL) && defined(ENABLE_NLS) && ENABLE_NLS)
+#if (defined (GRUB_UTIL) && defined(ENABLE_NLS) && ENABLE_NLS)
 static const char *
 get_localedir (void)
 {
@@ -653,7 +827,7 @@ static void
 grub_install_copy_nls(const char *src __attribute__ ((unused)),
                       const char *dst __attribute__ ((unused)))
 {
-#if !(defined (GRUB_UTIL) && defined(ENABLE_NLS) && ENABLE_NLS)
+#if (defined (GRUB_UTIL) && defined(ENABLE_NLS) && ENABLE_NLS)
   char *dst_locale;
 
   dst_locale = grub_util_path_concat (2, dst, "locale");
@@ -716,6 +890,7 @@ static struct
     [GRUB_INSTALL_PLATFORM_X86_64_EFI] =       { "x86_64",  "efi"       },
     [GRUB_INSTALL_PLATFORM_I386_XEN] =         { "i386",    "xen"       },
     [GRUB_INSTALL_PLATFORM_X86_64_XEN] =       { "x86_64",  "xen"       },
+    [GRUB_INSTALL_PLATFORM_I386_XEN_PVH] =     { "i386",    "xen_pvh"   },
     [GRUB_INSTALL_PLATFORM_MIPSEL_LOONGSON] =  { "mipsel",  "loongson"  },
     [GRUB_INSTALL_PLATFORM_MIPSEL_QEMU_MIPS] = { "mipsel",  "qemu_mips" },
     [GRUB_INSTALL_PLATFORM_MIPS_QEMU_MIPS] =   { "mips",    "qemu_mips" },
@@ -728,7 +903,9 @@ static struct
     [GRUB_INSTALL_PLATFORM_ARM64_EFI] =        { "arm64",   "efi"       },
     [GRUB_INSTALL_PLATFORM_ARM_UBOOT] =        { "arm",     "uboot"     },
     [GRUB_INSTALL_PLATFORM_ARM_COREBOOT] =     { "arm",     "coreboot"  },
-  }; 
+    [GRUB_INSTALL_PLATFORM_RISCV32_EFI] =      { "riscv32", "efi"       },
+    [GRUB_INSTALL_PLATFORM_RISCV64_EFI] =      { "riscv64", "efi"       },
+  };
 
 char *
 grub_install_get_platforms_string (void)
@@ -756,7 +933,7 @@ grub_install_get_platforms_string (void)
     }
   ptr[-2] = 0;
   free (arr);
- 
+
   return platforms_string;
 }
 
@@ -927,7 +1104,7 @@ grub_install_get_target (const char *src)
   fn = grub_util_path_concat (2, src, "modinfo.sh");
   f = grub_util_fd_open (fn, GRUB_UTIL_FD_O_RDONLY);
   if (!GRUB_UTIL_FD_IS_VALID (f))
-    grub_util_error (_("%s doesn't exist. Please specify --target or --directory"), 
+    grub_util_error (_("%s doesn't exist. Please specify --target or --directory"),
 		     fn);
   r = grub_util_fd_read (f, buf, sizeof (buf) - 1);
   if (r < 0)

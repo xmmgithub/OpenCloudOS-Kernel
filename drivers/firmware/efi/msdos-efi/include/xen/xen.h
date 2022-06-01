@@ -1,8 +1,8 @@
 /******************************************************************************
  * xen.h
- * 
+ *
  * Guest OS interface to Xen.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
  * deal in the Software without restriction, including without limitation the
@@ -53,17 +53,22 @@ DEFINE_XEN_GUEST_HANDLE(uint64_t);
 DEFINE_XEN_GUEST_HANDLE(xen_pfn_t);
 DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
 
-/* Turn a plain number into a C unsigned (long) constant. */
+/* Turn a plain number into a C unsigned (long (long)) constant. */
 #define __xen_mk_uint(x)  x ## U
 #define __xen_mk_ulong(x) x ## UL
+#ifndef __xen_mk_ullong
+# define __xen_mk_ullong(x) x ## ULL
+#endif
 #define xen_mk_uint(x)    __xen_mk_uint(x)
 #define xen_mk_ulong(x)   __xen_mk_ulong(x)
+#define xen_mk_ullong(x)  __xen_mk_ullong(x)
 
 #else
 
 /* In assembly code we cannot use C numeric constant suffixes. */
-#define xen_mk_uint(x)  x
-#define xen_mk_ulong(x) x
+#define xen_mk_uint(x)   x
+#define xen_mk_ulong(x)  x
+#define xen_mk_ullong(x) x
 
 #endif
 
@@ -115,6 +120,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
 #define __HYPERVISOR_tmem_op              38
 #define __HYPERVISOR_xc_reserved_op       39 /* reserved for XenClient */
 #define __HYPERVISOR_xenpmu_op            40
+#define __HYPERVISOR_dm_op                41
 
 /* Architecture-specific hypercall definitions. */
 #define __HYPERVISOR_arch_0               48
@@ -151,11 +157,11 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
 #define __HYPERVISOR_dom0_op __HYPERVISOR_platform_op
 #endif
 
-/* 
+/*
  * VIRTUAL INTERRUPTS
- * 
+ *
  * Virtual interrupts that a guest OS may receive from Xen.
- * 
+ *
  * In the side comments, 'V.' denotes a per-VCPU VIRQ while 'G.' denotes a
  * global VIRQ. The former can be bound once per VCPU and cannot be re-bound.
  * The latter can be allocated only once per guest: they must initially be
@@ -205,7 +211,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
  *                     (x) encodes the PFD as follows:
  *                     x == 0 => PFD == DOMID_SELF
  *                     x != 0 => PFD == x - 1
- * 
+ *
  * Sub-commands: ptr[1:0] specifies the appropriate MMU_* command.
  * -------------
  * ptr[1:0] == MMU_NORMAL_PT_UPDATE:
@@ -251,13 +257,13 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
  * To deallocate the pages, the operations are the reverse of the steps
  * mentioned above. The argument is MMUEXT_UNPIN_TABLE for all levels and the
  * pagetable MUST not be in use (meaning that the cr3 is not set to it).
- * 
+ *
  * ptr[1:0] == MMU_MACHPHYS_UPDATE:
  * Updates an entry in the machine->pseudo-physical mapping table.
  * ptr[:2]  -- Machine address within the frame whose mapping to modify.
  *             The frame must belong to the FD, if one is specified.
  * val      -- Value to write into the mapping entry.
- * 
+ *
  * ptr[1:0] == MMU_PT_UPDATE_PRESERVE_AD:
  * As MMU_NORMAL_PT_UPDATE above, but A/D bits currently in the PTE are ORed
  * with those in @val.
@@ -502,6 +508,21 @@ DEFINE_XEN_GUEST_HANDLE(mmuext_op_t);
 #define VMASST_TYPE_pae_extended_cr3     3
 
 /*
+ * x86 guests: Sane behaviour for virtual iopl
+ *  - virtual iopl updated from do_iret() hypercalls.
+ *  - virtual iopl reported in bounce frames.
+ *  - guest kernels assumed to be level 0 for the purpose of iopl checks.
+ */
+#define VMASST_TYPE_architectural_iopl   4
+
+/*
+ * All guests: activate update indicator in vcpu_runstate_info
+ * Enable setting the XEN_RUNSTATE_UPDATE flag in guest memory mapped
+ * vcpu_runstate_info during updates of the runstate information.
+ */
+#define VMASST_TYPE_runstate_update_flag 5
+
+/*
  * x86/64 guests: strictly hide M2P from user mode.
  * This allows the guest to control respective hypervisor behavior:
  * - when not set, L4 tables get created with the respective slot blank,
@@ -529,16 +550,21 @@ DEFINE_XEN_GUEST_HANDLE(mmuext_op_t);
  * is useful to ensure that no mappings to the OS's own heap are accidentally
  * installed. (e.g., in Linux this could cause havoc as reference counts
  * aren't adjusted on the I/O-mapping code path).
- * This only makes sense in MMUEXT_SET_FOREIGNDOM, but in that context can
- * be specified by any calling domain.
+ * This only makes sense as HYPERVISOR_mmu_update()'s and
+ * HYPERVISOR_update_va_mapping_otherdomain()'s "foreigndom" argument. For
+ * HYPERVISOR_mmu_update() context it can be specified by any calling domain,
+ * otherwise it's only permitted if the caller is privileged.
  */
 #define DOMID_IO             xen_mk_uint(0x7FF1)
 
 /*
  * DOMID_XEN is used to allow privileged domains to map restricted parts of
  * Xen's heap space (e.g., the machine_to_phys table).
- * This only makes sense in MMUEXT_SET_FOREIGNDOM, and is only permitted if
- * the caller is privileged.
+ * This only makes sense as
+ * - HYPERVISOR_mmu_update()'s, HYPERVISOR_mmuext_op()'s, or
+ *   HYPERVISOR_update_va_mapping_otherdomain()'s "foreigndom" argument,
+ * - with XENMAPSPACE_gmfn_foreign,
+ * and is only permitted if the caller is privileged.
  */
 #define DOMID_XEN            xen_mk_uint(0x7FF2)
 
@@ -614,14 +640,22 @@ struct vcpu_time_info {
      */
     uint32_t tsc_to_system_mul;
     int8_t   tsc_shift;
+#if __XEN_INTERFACE_VERSION__ > 0x040600
+    uint8_t  flags;
+    uint8_t  pad1[2];
+#else
     int8_t   pad1[3];
+#endif
 }; /* 32 bytes */
 typedef struct vcpu_time_info vcpu_time_info_t;
+
+#define XEN_PVCLOCK_TSC_STABLE_BIT     (1 << 0)
+#define XEN_PVCLOCK_GUEST_STOPPED      (1 << 1)
 
 struct vcpu_info {
     /*
      * 'evtchn_upcall_pending' is written non-zero by Xen to indicate
-     * a pending notification for a particular VCPU. It is then cleared 
+     * a pending notification for a particular VCPU. It is then cleared
      * by the guest OS /before/ checking for pending work, thus avoiding
      * a set-and-check race. Note that the mask is only accessed by Xen
      * on the CPU that is currently hosting the VCPU. This means that the
@@ -684,7 +718,7 @@ struct shared_info {
      *  3. Virtual interrupts ('events'). A domain can bind an event-channel
      *     port to a virtual interrupt source, such as the virtual-timer
      *     device or the emergency console.
-     * 
+     *
      * Event channels are addressed by a "port index". Each channel is
      * associated with two bits of information:
      *  1. PENDING -- notifies the domain that there is a pending notification
@@ -695,7 +729,7 @@ struct shared_info {
      *     becomes pending while the channel is masked then the 'edge' is lost
      *     (i.e., when the channel is unmasked, the guest must manually handle
      *     pending notifications as no upcall will be scheduled by Xen).
-     * 
+     *
      * To expedite scanning of pending notifications, any 0->1 pending
      * transition on an unmasked channel causes a corresponding bit in a
      * per-vcpu selector word to be set. Each bit in the selector covers a
@@ -736,7 +770,7 @@ typedef struct shared_info shared_info_t;
  *         (may be omitted)
  *      c. list of allocated page frames [mfn_list, nr_pages]
  *         (unless relocated due to XEN_ELFNOTE_INIT_P2M)
- *      d. start_info_t structure        [register ESI (x86)]
+ *      d. start_info_t structure        [register rSI (x86)]
  *         in case of dom0 this page contains the console info, too
  *      e. unless dom0: xenstore ring page
  *      f. unless dom0: console ring page
@@ -796,29 +830,6 @@ struct start_info {
     unsigned long nr_p2m_frames;/* # of pfns forming initial P->M table.  */
 };
 typedef struct start_info start_info_t;
-
-/*
- * Start of day structure passed to PVH guests in %ebx.
- *
- * NOTE: nothing will be loaded at physical address 0, so
- * a 0 value in any of the address fields should be treated
- * as not present.
- */
-struct hvm_start_info {
-#define HVM_START_MAGIC_VALUE 0x336ec578
-    uint32_t magic;             /* Contains the magic value 0x336ec578       */
-                                /* ("xEn3" with the 0x80 bit of the "E" set).*/
-    uint32_t flags;             /* SIF_xxx flags.                            */
-    uint32_t cmdline_paddr;     /* Physical address of the command line.     */
-    uint32_t nr_modules;        /* Number of modules passed to the kernel.   */
-    uint32_t modlist_paddr;     /* Physical address of an array of           */
-                                /* hvm_modlist_entry.                        */
-};
-
-struct hvm_modlist_entry {
-    uint32_t paddr;             /* Physical address of the module.           */
-    uint32_t size;              /* Size of the module in bytes.              */
-};
 
 /* New console union for dom0 introduced in 0x00030203. */
 #if __XEN_INTERFACE_VERSION__ < 0x00030203
@@ -918,6 +929,37 @@ __DEFINE_XEN_GUEST_HANDLE(uint8,  uint8_t);
 __DEFINE_XEN_GUEST_HANDLE(uint16, uint16_t);
 __DEFINE_XEN_GUEST_HANDLE(uint32, uint32_t);
 __DEFINE_XEN_GUEST_HANDLE(uint64, uint64_t);
+
+typedef struct {
+    uint8_t a[16];
+} xen_uuid_t;
+
+/*
+ * XEN_DEFINE_UUID(0x00112233, 0x4455, 0x6677, 0x8899,
+ *                 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff)
+ * will construct UUID 00112233-4455-6677-8899-aabbccddeeff presented as
+ * {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+ * 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+ *
+ * NB: This is compatible with Linux kernel and with libuuid, but it is not
+ * compatible with Microsoft, as they use mixed-endian encoding (some
+ * components are little-endian, some are big-endian).
+ */
+#define XEN_DEFINE_UUID_(a, b, c, d, e1, e2, e3, e4, e5, e6)            \
+    {{((a) >> 24) & 0xFF, ((a) >> 16) & 0xFF,                           \
+      ((a) >>  8) & 0xFF, ((a) >>  0) & 0xFF,                           \
+      ((b) >>  8) & 0xFF, ((b) >>  0) & 0xFF,                           \
+      ((c) >>  8) & 0xFF, ((c) >>  0) & 0xFF,                           \
+      ((d) >>  8) & 0xFF, ((d) >>  0) & 0xFF,                           \
+                e1, e2, e3, e4, e5, e6}}
+
+#if defined(__STDC_VERSION__) ? __STDC_VERSION__ >= 199901L : defined(__GNUC__)
+#define XEN_DEFINE_UUID(a, b, c, d, e1, e2, e3, e4, e5, e6)             \
+    ((xen_uuid_t)XEN_DEFINE_UUID_(a, b, c, d, e1, e2, e3, e4, e5, e6))
+#else
+#define XEN_DEFINE_UUID(a, b, c, d, e1, e2, e3, e4, e5, e6)             \
+    XEN_DEFINE_UUID_(a, b, c, d, e1, e2, e3, e4, e5, e6)
+#endif /* __STDC_VERSION__ / __GNUC__ */
 
 #endif /* !__ASSEMBLY__ */
 

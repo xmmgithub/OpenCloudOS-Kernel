@@ -1,8 +1,8 @@
 /******************************************************************************
  * arch-x86/xen.h
- * 
+ *
  * Guest OS interface to x86 Xen.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
  * deal in the Software without restriction, including without limitation the
@@ -152,7 +152,7 @@ DEFINE_XEN_GUEST_HANDLE(trap_info_t);
 typedef uint64_t tsc_timestamp_t; /* RDTSC timestamp */
 
 /*
- * The following is all CPU context. Note that the fpu_ctxt block is filled 
+ * The following is all CPU context. Note that the fpu_ctxt block is filled
  * in by FXSAVE if the CPU has feature FXSR; otherwise FSAVE is used.
  *
  * Also note that when calling DOMCTL_setvcpucontext and VCPU_initialise
@@ -259,6 +259,13 @@ typedef struct arch_shared_info arch_shared_info_t;
 #define XEN_EMULATE_PREFIX ".byte 0x0f,0x0b,0x78,0x65,0x6e ; "
 #define XEN_CPUID          XEN_EMULATE_PREFIX "cpuid"
 #endif
+
+/*
+ * Debug console IO port, also called "port E9 hack". Each character written
+ * to this IO port will be printed on the hypervisor console, subject to log
+ * level restrictions.
+ */
+#define XEN_HVM_DEBUGCONS_IOPORT 0xe9
 
 #endif /* __XEN_PUBLIC_ARCH_X86_XEN_H__ */
 

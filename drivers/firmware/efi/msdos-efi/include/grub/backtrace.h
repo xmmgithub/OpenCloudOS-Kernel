@@ -19,14 +19,8 @@
 #ifndef GRUB_BACKTRACE_HEADER
 #define GRUB_BACKTRACE_HEADER	1
 
-#include <grub/symbol.h>
-#include <grub/types.h>
-
-void EXPORT_FUNC(grub_debug_backtrace) (const char * const debug,
-					unsigned int skip);
-void EXPORT_FUNC(grub_backtrace) (unsigned int skip);
-void grub_backtrace_arch (unsigned int skip);
-void grub_backtrace_pointer (void *ptr, unsigned int skip);
+void grub_backtrace (void);
+void grub_backtrace_pointer (void *ptr);
 void grub_backtrace_print_address (void *addr);
 
 #endif

@@ -86,17 +86,17 @@ enum
     OPTION_ROOT_DIRECTORY,
     OPTION_TARGET,
     OPTION_SETUP,
-    OPTION_MKRELPATH, 
-    OPTION_MKDEVICEMAP, 
-    OPTION_PROBE, 
-    OPTION_EDITENV, 
-    OPTION_ALLOW_FLOPPY, 
-    OPTION_RECHECK, 
+    OPTION_MKRELPATH,
+    OPTION_MKDEVICEMAP,
+    OPTION_PROBE,
+    OPTION_EDITENV,
+    OPTION_ALLOW_FLOPPY,
+    OPTION_RECHECK,
     OPTION_FORCE,
     OPTION_FORCE_FILE_ID,
-    OPTION_NO_NVRAM, 
-    OPTION_REMOVABLE, 
-    OPTION_BOOTLOADER_ID, 
+    OPTION_NO_NVRAM,
+    OPTION_REMOVABLE,
+    OPTION_BOOTLOADER_ID,
     OPTION_EFI_DIRECTORY,
     OPTION_FONT,
     OPTION_DEBUG,
@@ -114,7 +114,7 @@ enum
 
 static int fs_probe = 1;
 
-static error_t 
+static error_t
 argp_parser (int key, char *arg, struct argp_state *state)
 {
   if (grub_install_parse (key, arg))
@@ -319,11 +319,19 @@ get_default_platform (void)
 #elif defined (__ia64__)
    return "ia64-efi";
 #elif defined (__arm__)
-   return "arm-uboot";
+   return grub_install_get_default_arm_platform ();
 #elif defined (__aarch64__)
    return "arm64-efi";
 #elif defined (__amd64__) || defined (__x86_64__) || defined (__i386__)
    return grub_install_get_default_x86_platform ();
+#elif defined (__riscv)
+#if __riscv_xlen == 32
+   return "riscv32-efi";
+#elif __riscv_xlen == 64
+   return "riscv64-efi";
+#else
+   return NULL;
+#endif
 #else
    return NULL;
 #endif
@@ -362,7 +370,7 @@ struct argp argp = {
   N_("Install GRUB on your drive.")"\v"
   N_("INSTALL_DEVICE must be system device filename.\n"
      "%s copies GRUB images into %s.  On some platforms, it"
-     " may also install GRUB into the boot sector."), 
+     " may also install GRUB into the boot sector."),
   NULL, help_filter, NULL
 };
 
@@ -446,8 +454,8 @@ probe_mods (grub_disk_t disk)
   if (raid_level >= 0)
     {
       grub_install_push_module ("diskfilter");
-      if (disk->dev->raidname)
-	grub_install_push_module (disk->dev->raidname (disk));
+      if (disk->dev->disk_raidname)
+	grub_install_push_module (disk->dev->disk_raidname (disk));
     }
   if (raid_level == 5)
     grub_install_push_module ("raid5rec");
@@ -455,8 +463,8 @@ probe_mods (grub_disk_t disk)
     grub_install_push_module ("raid6rec");
 
   /* In case of LVM/RAID, check the member devices as well.  */
-  if (disk->dev->memberlist)
-    list = disk->dev->memberlist (disk);
+  if (disk->dev->disk_memberlist)
+    list = disk->dev->disk_memberlist (disk);
   while (list)
     {
       probe_mods (list->disk);
@@ -477,6 +485,8 @@ have_bootdev (enum grub_install_plat pl)
     case GRUB_INSTALL_PLATFORM_IA64_EFI:
     case GRUB_INSTALL_PLATFORM_ARM_EFI:
     case GRUB_INSTALL_PLATFORM_ARM64_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
     case GRUB_INSTALL_PLATFORM_I386_IEEE1275:
     case GRUB_INSTALL_PLATFORM_SPARC64_IEEE1275:
     case GRUB_INSTALL_PLATFORM_POWERPC_IEEE1275:
@@ -496,6 +506,7 @@ have_bootdev (enum grub_install_plat pl)
 
     case GRUB_INSTALL_PLATFORM_I386_XEN:
     case GRUB_INSTALL_PLATFORM_X86_64_XEN:
+    case GRUB_INSTALL_PLATFORM_I386_XEN_PVH:
       return 0;
 
       /* pacify warning.  */
@@ -511,9 +522,9 @@ probe_cryptodisk_uuid (grub_disk_t disk)
   grub_disk_memberlist_t list = NULL, tmp;
 
   /* In case of LVM/RAID, check the member devices as well.  */
-  if (disk->dev->memberlist)
+  if (disk->dev->disk_memberlist)
     {
-      list = disk->dev->memberlist (disk);
+      list = disk->dev->disk_memberlist (disk);
     }
   while (list)
     {
@@ -623,7 +634,7 @@ device_map_check_duplicates (const char *dev_map)
   if (! fp)
     return;
 
-  d = xmalloc (alloced * sizeof (d[0]));
+  d = xcalloc (alloced, sizeof (d[0]));
 
   while (fgets (buf, sizeof (buf), fp))
     {
@@ -685,7 +696,7 @@ write_to_disk (grub_device_t dev, const char *fn)
 
   core_size = grub_util_get_image_size (fn);
 
-  core_img = grub_util_read_image (fn);    
+  core_img = grub_util_read_image (fn);
 
   grub_util_info ("writing `%s' to `%s'", fn, dev->disk->name);
   err = grub_disk_write (dev->disk, 0, 0,
@@ -737,7 +748,7 @@ is_prep_empty (grub_device_t dev)
   grub_disk_addr_t dsize, addr;
   grub_uint32_t buffer[32768];
 
-  dsize = grub_disk_get_size (dev->disk);
+  dsize = grub_disk_native_sectors (dev->disk);
   for (addr = 0; addr < dsize;
        addr += sizeof (buffer) / GRUB_DISK_SECTOR_SIZE)
     {
@@ -816,8 +827,6 @@ fill_core_services (const char *core_services)
   free (sysv_plist);
 }
 
-extern int use_relative_path_on_btrfs;
-
 int
 main (int argc, char *argv[])
 {
@@ -851,9 +860,6 @@ main (int argc, char *argv[])
 
   grub_util_load_config (&config);
 
-  if (config.is_suse_btrfs_snapshot_enabled)
-    use_relative_path_on_btrfs = 1;
-
   if (!bootloader_id && config.grub_distributor)
     {
       char *ptr;
@@ -876,11 +882,11 @@ main (int argc, char *argv[])
 	  const char * t;
 	  t = get_default_platform ();
 	  if (!t)
-	    grub_util_error ("%s", 
+	    grub_util_error ("%s",
 			     _("Unable to determine your platform."
 			       " Use --target.")
 			     );
-	  target = xstrdup (t); 
+	  target = xstrdup (t);
 	}
       grub_install_source_directory
 	= grub_util_path_concat (2, grub_util_get_pkglibdir (), target);
@@ -904,6 +910,8 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_X86_64_EFI:
     case GRUB_INSTALL_PLATFORM_ARM_EFI:
     case GRUB_INSTALL_PLATFORM_ARM64_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
     case GRUB_INSTALL_PLATFORM_IA64_EFI:
     case GRUB_INSTALL_PLATFORM_I386_IEEE1275:
     case GRUB_INSTALL_PLATFORM_SPARC64_IEEE1275:
@@ -913,6 +921,7 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_ARM_UBOOT:
     case GRUB_INSTALL_PLATFORM_I386_XEN:
     case GRUB_INSTALL_PLATFORM_X86_64_XEN:
+    case GRUB_INSTALL_PLATFORM_I386_XEN_PVH:
       break;
 
     case GRUB_INSTALL_PLATFORM_I386_QEMU:
@@ -948,6 +957,8 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_X86_64_EFI:
     case GRUB_INSTALL_PLATFORM_ARM_EFI:
     case GRUB_INSTALL_PLATFORM_ARM64_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
     case GRUB_INSTALL_PLATFORM_IA64_EFI:
     case GRUB_INSTALL_PLATFORM_I386_IEEE1275:
     case GRUB_INSTALL_PLATFORM_ARM_UBOOT:
@@ -960,6 +971,7 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_MIPS_QEMU_MIPS:
     case GRUB_INSTALL_PLATFORM_I386_XEN:
     case GRUB_INSTALL_PLATFORM_X86_64_XEN:
+    case GRUB_INSTALL_PLATFORM_I386_XEN_PVH:
       free (install_device);
       install_device = NULL;
       break;
@@ -1000,6 +1012,8 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_X86_64_EFI:
     case GRUB_INSTALL_PLATFORM_ARM_EFI:
     case GRUB_INSTALL_PLATFORM_ARM64_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
     case GRUB_INSTALL_PLATFORM_IA64_EFI:
       is_efi = 1;
       break;
@@ -1057,7 +1071,7 @@ main (int argc, char *argv[])
 
       for (curdev = efidir_device_names; *curdev; curdev++)
 	  grub_util_pull_device (*curdev);
-      
+
       efidir_grub_devname = grub_util_get_grub_dev (efidir_device_names[0]);
       if (!efidir_grub_devname)
 	grub_util_error (_("cannot find a GRUB drive for %s.  Check your device.map"),
@@ -1078,7 +1092,12 @@ main (int argc, char *argv[])
 	efidir_is_mac = 1;
 
       if (!efidir_is_mac && grub_strcmp (fs->name, "fat") != 0)
-	grub_util_error (_("%s doesn't look like an EFI partition"), efidir);
+	{
+	  if (force)
+	    grub_util_warn (_("%s doesn't look like an EFI partition, system may not boot"), efidir);
+	  else
+	    grub_util_error (_("%s doesn't look like an EFI partition"), efidir);
+	}
 
       /* The EFI specification requires that an EFI System Partition must
 	 contain an "EFI" subdirectory, and that OS loaders are stored in
@@ -1113,6 +1132,12 @@ main (int argc, char *argv[])
 	    case GRUB_INSTALL_PLATFORM_ARM64_EFI:
 	      efi_file = "BOOTAA64.EFI";
 	      break;
+	    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+	      efi_file = "BOOTRISCV32.EFI";
+	      break;
+	    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
+	      efi_file = "BOOTRISCV64.EFI";
+	      break;
 	    default:
 	      grub_util_error ("%s", _("You've found a bug"));
 	      break;
@@ -1140,6 +1165,12 @@ main (int argc, char *argv[])
 	    case GRUB_INSTALL_PLATFORM_ARM64_EFI:
 	      efi_file = "grubaa64.efi";
 	      break;
+	    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+	      efi_file = "grubriscv32.efi";
+	      break;
+	    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
+	      efi_file = "grubriscv64.efi";
+	      break;
 	    default:
 	      efi_file = "grub.efi";
 	      break;
@@ -1159,8 +1190,18 @@ main (int argc, char *argv[])
 	  char *d;
 
 	  is_guess = 1;
-	  /* Find the Mac HFS(+) System Partition.  */
 	  d = grub_util_path_concat (2, bootdir, "macppc");
+	  if (!grub_util_is_directory (d))
+	    {
+	      free (d);
+	      d = grub_util_path_concat (2, bootdir, "efi");
+	    }
+	  /* Find the Mac HFS(+) System Partition.  */
+	  if (!grub_util_is_directory (d))
+	    {
+	      free (d);
+	      d = grub_util_path_concat (2, bootdir, "EFI");
+	    }
 	  if (!grub_util_is_directory (d))
 	    {
 	      free (d);
@@ -1183,12 +1224,12 @@ main (int argc, char *argv[])
 
 	  for (curdev = macppcdir_device_names; *curdev; curdev++)
 	    grub_util_pull_device (*curdev);
-      
+
 	  macppcdir_grub_devname = grub_util_get_grub_dev (macppcdir_device_names[0]);
 	  if (!macppcdir_grub_devname)
 	    grub_util_error (_("cannot find a GRUB drive for %s.  Check your device.map"),
 			     macppcdir_device_names[0]);
-	  
+
 	  macppcdir_grub_dev = grub_device_open (macppcdir_grub_devname);
 	  if (! macppcdir_grub_dev)
 	    grub_util_error ("%s", grub_errmsg);
@@ -1232,7 +1273,7 @@ main (int argc, char *argv[])
       ndev++;
     }
 
-  grub_drives = xmalloc (sizeof (grub_drives[0]) * (ndev + 1)); 
+  grub_drives = xcalloc (ndev + 1, sizeof (grub_drives[0]));
 
   for (curdev = grub_devices, curdrive = grub_drives; *curdev; curdev++,
        curdrive++)
@@ -1316,16 +1357,6 @@ main (int argc, char *argv[])
       fprintf (load_cfg_f, "set debug='%s'\n",
 	      debug_image);
     }
-
-  if (config.is_suse_btrfs_snapshot_enabled
-      && grub_strncmp(grub_fs->name, "btrfs", sizeof ("btrfs") - 1) == 0)
-    {
-      if (!load_cfg_f)
-        load_cfg_f = grub_util_fopen (load_cfg, "wb");
-      have_load_cfg = 1;
-      fprintf (load_cfg_f, "set btrfs_relative_path='y'\n");
-    }
-
   char *prefix_drive = NULL;
   char *install_drive = NULL;
 
@@ -1360,8 +1391,8 @@ main (int argc, char *argv[])
 	{
 	  char *uuid = NULL;
 	  /*  generic method (used on coreboot and ata mod).  */
-	  if (!force_file_id && grub_fs->uuid && grub_fs->uuid (grub_dev,
-								&uuid))
+	  if (!force_file_id
+	      && grub_fs->fs_uuid && grub_fs->fs_uuid (grub_dev, &uuid))
 	    {
 	      grub_print_error ();
 	      grub_errno = 0;
@@ -1442,6 +1473,8 @@ main (int argc, char *argv[])
 		  case GRUB_INSTALL_PLATFORM_X86_64_EFI:
 		  case GRUB_INSTALL_PLATFORM_ARM_EFI:
 		  case GRUB_INSTALL_PLATFORM_ARM64_EFI:
+		  case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+		  case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
 		  case GRUB_INSTALL_PLATFORM_IA64_EFI:
 		    g = grub_util_guess_efi_drive (*curdev);
 		    break;
@@ -1467,6 +1500,7 @@ main (int argc, char *argv[])
 		  case GRUB_INSTALL_PLATFORM_ARM_UBOOT:
 		  case GRUB_INSTALL_PLATFORM_I386_XEN:
 		  case GRUB_INSTALL_PLATFORM_X86_64_XEN:
+		  case GRUB_INSTALL_PLATFORM_I386_XEN_PVH:
 		    grub_util_warn ("%s", _("no hints available for your platform. Expect reduced performance"));
 		    break;
 		    /* pacify warning.  */
@@ -1525,55 +1559,6 @@ main (int argc, char *argv[])
       prefix_drive = xasprintf ("(%s)", grub_drives[0]);
     }
 
-#ifdef __linux__
-
-  if (config.is_suse_btrfs_snapshot_enabled
-      && grub_strncmp(grub_fs->name, "btrfs", sizeof ("btrfs") - 1) == 0)
-    {
-      char *subvol = NULL;
-      char *mount_path = NULL;
-      char **rootdir_devices = NULL;
-      char *rootdir_path = grub_util_path_concat (2, "/", rootdir);
-
-      if (grub_util_is_directory (rootdir_path))
-	rootdir_devices = grub_guess_root_devices (rootdir_path);
-
-      free (rootdir_path);
-
-      if (rootdir_devices && rootdir_devices[0])
-	if (grub_strcmp (rootdir_devices[0], grub_devices[0]) == 0)
-	  subvol = grub_util_get_btrfs_subvol (platdir, &mount_path);
-
-      if (subvol && mount_path)
-	{
-	  char *def_subvol;
-
-	  def_subvol = grub_util_get_btrfs_subvol ("/", NULL);
-
-	  if (def_subvol)
-	    {
-	      if (!load_cfg_f)
-		load_cfg_f = grub_util_fopen (load_cfg, "wb");
-	      have_load_cfg = 1;
-
-	      if (grub_strcmp (subvol, def_subvol) != 0)
-		fprintf (load_cfg_f, "btrfs-mount-subvol ($root) %s %s\n", mount_path, subvol);
-	      free (def_subvol);
-	    }
-	}
-
-      for (curdev = rootdir_devices; *curdev; curdev++)
-	free (*curdev);
-      if (rootdir_devices)
-	free (rootdir_devices);
-      if (subvol)
-	free (subvol);
-      if (mount_path)
-	free (mount_path);
-    }
-
-#endif
-
   char mkimage_target[200];
   const char *core_name = NULL;
 
@@ -1583,6 +1568,8 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_X86_64_EFI:
     case GRUB_INSTALL_PLATFORM_ARM_EFI:
     case GRUB_INSTALL_PLATFORM_ARM64_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
     case GRUB_INSTALL_PLATFORM_IA64_EFI:
       core_name = "core.efi";
       snprintf (mkimage_target, sizeof (mkimage_target),
@@ -1607,6 +1594,7 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_POWERPC_IEEE1275:
     case GRUB_INSTALL_PLATFORM_I386_XEN:
     case GRUB_INSTALL_PLATFORM_X86_64_XEN:
+    case GRUB_INSTALL_PLATFORM_I386_XEN_PVH:
       core_name = "core.elf";
       snprintf (mkimage_target, sizeof (mkimage_target),
 		"%s-%s",
@@ -1685,6 +1673,8 @@ main (int argc, char *argv[])
       break;
     case GRUB_INSTALL_PLATFORM_ARM_EFI:
     case GRUB_INSTALL_PLATFORM_ARM64_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
     case GRUB_INSTALL_PLATFORM_IA64_EFI:
     case GRUB_INSTALL_PLATFORM_MIPSEL_QEMU_MIPS:
     case GRUB_INSTALL_PLATFORM_MIPS_QEMU_MIPS:
@@ -1699,6 +1689,7 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_SPARC64_IEEE1275:
     case GRUB_INSTALL_PLATFORM_I386_XEN:
     case GRUB_INSTALL_PLATFORM_X86_64_XEN:
+    case GRUB_INSTALL_PLATFORM_I386_XEN_PVH:
       break;
       /* pacify warning.  */
     case GRUB_INSTALL_PLATFORM_MAX:
@@ -1711,7 +1702,7 @@ main (int argc, char *argv[])
     {
     case GRUB_INSTALL_PLATFORM_I386_PC:
       {
-	char *boot_img_src = grub_util_path_concat (2, 
+	char *boot_img_src = grub_util_path_concat (2,
 						  grub_install_source_directory,
 						  "boot.img");
 	char *boot_img = grub_util_path_concat (2, platdir,
@@ -1730,17 +1721,22 @@ main (int argc, char *argv[])
 			platdir,
 			device_map,
 			install_device);
-			
+
 	/*  Now perform the installation.  */
 	if (install_bootsector)
-	  grub_util_bios_setup (platdir, "boot.img", "core.img",
-				install_drive, force,
-				fs_probe, allow_floppy, add_rs_codes);
+	  {
+	    grub_util_bios_setup (platdir, "boot.img", "core.img",
+				  install_drive, force,
+				  fs_probe, allow_floppy, add_rs_codes,
+				  !grub_install_is_short_mbrgap_supported ());
+
+	    grub_set_install_backup_ponr ();
+	  }
 	break;
       }
     case GRUB_INSTALL_PLATFORM_SPARC64_IEEE1275:
       {
-	char *boot_img_src = grub_util_path_concat (2, 
+	char *boot_img_src = grub_util_path_concat (2,
 						  grub_install_source_directory,
 						  "boot.img");
 	char *boot_img = grub_util_path_concat (2, platdir,
@@ -1756,13 +1752,17 @@ main (int argc, char *argv[])
 			platdir,
 			device_map,
 			install_drive);
-			
+
 	/*  Now perform the installation.  */
 	if (install_bootsector)
-	  grub_util_sparc_setup (platdir, "boot.img", "core.img",
-				 install_drive, force,
-				 fs_probe, allow_floppy,
-				 0 /* unused */ );
+	  {
+	    grub_util_sparc_setup (platdir, "boot.img", "core.img",
+				   install_drive, force,
+				   fs_probe, allow_floppy,
+				   0 /* unused */, 0 /* unused */ );
+
+	    grub_set_install_backup_ponr ();
+	  }
 	break;
       }
 
@@ -1789,6 +1789,8 @@ main (int argc, char *argv[])
 	  grub_elf = grub_util_path_concat (2, core_services, "grub.elf");
 	  grub_install_copy_file (imgfile, grub_elf, 1);
 
+	  grub_set_install_backup_ponr ();
+
 	  f = grub_util_fopen (mach_kernel, "a+");
 	  if (!f)
 	    grub_util_error (_("Can't create file: %s"), strerror (errno));
@@ -1797,6 +1799,8 @@ main (int argc, char *argv[])
 	  fill_core_services (core_services);
 
 	  ins_dev = grub_device_open (install_drive);
+	  if (ins_dev == NULL)
+	    grub_util_error ("%s", grub_errmsg);
 
 	  bless (ins_dev, core_services, 0);
 
@@ -1889,6 +1893,8 @@ main (int argc, char *argv[])
 	  boot_efi = grub_util_path_concat (2, core_services, "boot.efi");
 	  grub_install_copy_file (imgfile, boot_efi, 1);
 
+	  grub_set_install_backup_ponr ();
+
 	  f = grub_util_fopen (mach_kernel, "r+");
 	  if (!f)
 	    grub_util_error (_("Can't create file: %s"), strerror (errno));
@@ -1897,6 +1903,8 @@ main (int argc, char *argv[])
 	  fill_core_services(core_services);
 
 	  ins_dev = grub_device_open (install_drive);
+	  if (ins_dev == NULL)
+	    grub_util_error ("%s", grub_errmsg);
 
 	  bless (ins_dev, boot_efi, 1);
 	  if (!removable && update_nvram)
@@ -1919,10 +1927,15 @@ main (int argc, char *argv[])
       /* FALLTHROUGH */
     case GRUB_INSTALL_PLATFORM_ARM_EFI:
     case GRUB_INSTALL_PLATFORM_ARM64_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV32_EFI:
+    case GRUB_INSTALL_PLATFORM_RISCV64_EFI:
     case GRUB_INSTALL_PLATFORM_IA64_EFI:
       {
 	char *dst = grub_util_path_concat (2, efidir, efi_file);
 	grub_install_copy_file (imgfile, dst, 1);
+
+	grub_set_install_backup_ponr ();
+
 	free (dst);
       }
       if (!removable && update_nvram)
@@ -1965,6 +1978,7 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_I386_QEMU:
     case GRUB_INSTALL_PLATFORM_I386_XEN:
     case GRUB_INSTALL_PLATFORM_X86_64_XEN:
+    case GRUB_INSTALL_PLATFORM_I386_XEN_PVH:
       grub_util_warn ("%s",
 		      _("WARNING: no platform-specific install was performed"));
       break;
@@ -1972,6 +1986,14 @@ main (int argc, char *argv[])
     case GRUB_INSTALL_PLATFORM_MAX:
       break;
     }
+
+  /*
+   * Either there are no platform specific code, or it didn't raise
+   * ponr. Raise it here, because usually this is already past point
+   * of no return. If we leave this flag false, at exit all the modules
+   * will be removed from the prefix which would be very confusing.
+   */
+  grub_set_install_backup_ponr ();
 
   fprintf (stderr, "%s\n", _("Installation finished. No error reported."));
 

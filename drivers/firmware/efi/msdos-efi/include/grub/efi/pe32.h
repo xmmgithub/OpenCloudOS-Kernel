@@ -20,6 +20,7 @@
 #define GRUB_EFI_PE32_HEADER	1
 
 #include <grub/types.h>
+#include <grub/efi/memory.h>
 
 /* The MSDOS compatibility stub. This was copied from the output of
    objcopy, and it is not necessary to care about what this means.  */
@@ -50,8 +51,14 @@
 /* According to the spec, the minimal alignment is 512 bytes...
    But some examples (such as EFI drivers in the Intel
    Sample Implementation) use 32 bytes (0x20) instead, and it seems
-   to be working. For now, GRUB uses 512 bytes for safety.  */
-#define GRUB_PE32_SECTION_ALIGNMENT	0x200
+   to be working.
+
+   However, there is firmware showing up in the field now with
+   page alignment constraints to guarantee that page protection
+   bits take effect. Because currently existing GRUB code can not
+   properly distinguish between in-memory and in-file layout, let's
+   bump all alignment to GRUB_EFI_PAGE_SIZE. */
+#define GRUB_PE32_SECTION_ALIGNMENT	GRUB_EFI_PAGE_SIZE
 #define GRUB_PE32_FILE_ALIGNMENT	GRUB_PE32_SECTION_ALIGNMENT
 
 struct grub_pe32_coff_header
@@ -70,6 +77,8 @@ struct grub_pe32_coff_header
 #define GRUB_PE32_MACHINE_X86_64		0x8664
 #define GRUB_PE32_MACHINE_ARMTHUMB_MIXED	0x01c2
 #define GRUB_PE32_MACHINE_ARM64			0xAA64
+#define GRUB_PE32_MACHINE_RISCV32		0x5032
+#define GRUB_PE32_MACHINE_RISCV64		0x5064
 
 #define GRUB_PE32_RELOCS_STRIPPED		0x0001
 #define GRUB_PE32_EXECUTABLE_IMAGE		0x0002
@@ -214,11 +223,7 @@ struct grub_pe64_optional_header
 struct grub_pe32_section_table
 {
   char name[8];
-  union
-    {
-      grub_uint32_t physical_address;
-      grub_uint32_t virtual_size;
-    };
+  grub_uint32_t virtual_size;
   grub_uint32_t virtual_address;
   grub_uint32_t raw_data_size;
   grub_uint32_t raw_data_offset;
@@ -229,18 +234,12 @@ struct grub_pe32_section_table
   grub_uint32_t characteristics;
 };
 
-#define GRUB_PE32_SCN_TYPE_NO_PAD		0x00000008
 #define GRUB_PE32_SCN_CNT_CODE			0x00000020
 #define GRUB_PE32_SCN_CNT_INITIALIZED_DATA	0x00000040
-#define GRUB_PE32_SCN_CNT_UNINITIALIZED_DATA	0x00000080
-#define GRUB_PE32_SCN_LNK_OTHER			0x00000100
-#define GRUB_PE32_SCN_LNK_INFO			0x00000200
-#define GRUB_PE32_SCN_LNK_REMOVE		0x00000800
-#define GRUB_PE32_SCN_LNK_COMDAT		0x00001000
-#define GRUB_PE32_SCN_GPREL			0x00008000
-#define GRUB_PE32_SCN_MEM_16BIT			0x00020000
-#define GRUB_PE32_SCN_MEM_LOCKED		0x00040000
-#define GRUB_PE32_SCN_MEM_PRELOAD		0x00080000
+#define GRUB_PE32_SCN_MEM_DISCARDABLE		0x02000000
+#define GRUB_PE32_SCN_MEM_EXECUTE		0x20000000
+#define GRUB_PE32_SCN_MEM_READ			0x40000000
+#define GRUB_PE32_SCN_MEM_WRITE			0x80000000
 
 #define GRUB_PE32_SCN_ALIGN_1BYTES		0x00100000
 #define GRUB_PE32_SCN_ALIGN_2BYTES		0x00200000
@@ -249,27 +248,9 @@ struct grub_pe32_section_table
 #define GRUB_PE32_SCN_ALIGN_16BYTES		0x00500000
 #define GRUB_PE32_SCN_ALIGN_32BYTES		0x00600000
 #define GRUB_PE32_SCN_ALIGN_64BYTES		0x00700000
-#define GRUB_PE32_SCN_ALIGN_128BYTES		0x00800000
-#define GRUB_PE32_SCN_ALIGN_256BYTES		0x00900000
-#define GRUB_PE32_SCN_ALIGN_512BYTES		0x00A00000
-#define GRUB_PE32_SCN_ALIGN_1024BYTES		0x00B00000
-#define GRUB_PE32_SCN_ALIGN_2048BYTES		0x00C00000
-#define GRUB_PE32_SCN_ALIGN_4096BYTES		0x00D00000
-#define GRUB_PE32_SCN_ALIGN_8192BYTES		0x00E00000
 
 #define GRUB_PE32_SCN_ALIGN_SHIFT		20
 #define GRUB_PE32_SCN_ALIGN_MASK		7
-
-#define GRUB_PE32_SCN_LNK_NRELOC_OVFL		0x01000000
-#define GRUB_PE32_SCN_MEM_DISCARDABLE		0x02000000
-#define GRUB_PE32_SCN_MEM_NOT_CACHED		0x04000000
-#define GRUB_PE32_SCN_MEM_NOT_PAGED		0x08000000
-#define GRUB_PE32_SCN_MEM_SHARED		0x10000000
-#define GRUB_PE32_SCN_MEM_EXECUTE		0x20000000
-#define GRUB_PE32_SCN_MEM_READ			0x40000000
-#define GRUB_PE32_SCN_MEM_WRITE			0x80000000
-
-
 
 #define GRUB_PE32_SIGNATURE_SIZE 4
 
@@ -293,20 +274,6 @@ struct grub_pe32_header
 #endif
 };
 
-struct grub_pe32_header_32
-{
-  char signature[GRUB_PE32_SIGNATURE_SIZE];
-  struct grub_pe32_coff_header coff_header;
-  struct grub_pe32_optional_header optional_header;
-};
-
-struct grub_pe32_header_64
-{
-  char signature[GRUB_PE32_SIGNATURE_SIZE];
-  struct grub_pe32_coff_header coff_header;
-  struct grub_pe64_optional_header optional_header;
-};
-
 struct grub_pe32_fixup_block
 {
   grub_uint32_t page_rva;
@@ -323,9 +290,12 @@ struct grub_pe32_fixup_block
 #define GRUB_PE32_REL_BASED_HIGHADJ	4
 #define GRUB_PE32_REL_BASED_MIPS_JMPADDR 5
 #define GRUB_PE32_REL_BASED_ARM_MOV32A  5
+#define GRUB_PE32_REL_BASED_RISCV_HI20	5
 #define GRUB_PE32_REL_BASED_SECTION	6
 #define GRUB_PE32_REL_BASED_REL		7
 #define GRUB_PE32_REL_BASED_ARM_MOV32T  7
+#define GRUB_PE32_REL_BASED_RISCV_LOW12I 7
+#define GRUB_PE32_REL_BASED_RISCV_LOW12S 8
 #define GRUB_PE32_REL_BASED_IA64_IMM64	9
 #define GRUB_PE32_REL_BASED_DIR64	10
 #define GRUB_PE32_REL_BASED_HIGH3ADJ	11

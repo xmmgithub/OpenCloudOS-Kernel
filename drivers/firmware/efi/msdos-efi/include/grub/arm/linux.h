@@ -20,7 +20,6 @@
 #ifndef GRUB_ARM_LINUX_HEADER
 #define GRUB_ARM_LINUX_HEADER 1
 
-#include <grub/efi/pe32.h>
 #include "system.h"
 
 #define GRUB_LINUX_ARM_MAGIC_SIGNATURE 0x016f2818
@@ -35,23 +34,15 @@ struct linux_arm_kernel_header {
   grub_uint32_t hdr_offset;
 };
 
-struct grub_arm_linux_pe_header
-{
-  grub_uint32_t magic;
-  struct grub_pe32_coff_header coff;
-  struct grub_pe32_optional_header opt;
-};
-
 #if defined(__arm__)
 # define GRUB_LINUX_ARMXX_MAGIC_SIGNATURE GRUB_LINUX_ARM_MAGIC_SIGNATURE
-# define linux_armxx_kernel_header linux_arm_kernel_header
-# define grub_armxx_linux_pe_header grub_arm_linux_pe_header
+# define linux_arch_kernel_header linux_arm_kernel_header
 #endif
 
 #if defined GRUB_MACHINE_UBOOT
 # include <grub/uboot/uboot.h>
 # define LINUX_ADDRESS        (start_of_ram + 0x8000)
-# define LINUX_INITRD_ADDRESS (start_of_ram + 0x02000000)
+# define LINUX_INITRD_ADDRESS (start_of_ram + 0x03000000)
 # define LINUX_FDT_ADDRESS    (LINUX_INITRD_ADDRESS - 0x10000)
 # define grub_arm_firmware_get_boot_data grub_uboot_get_boot_data
 # define grub_arm_firmware_get_machine_type grub_uboot_get_machine_type
@@ -59,7 +50,7 @@ struct grub_arm_linux_pe_header
 #include <grub/fdtbus.h>
 #include <grub/arm/coreboot/kernel.h>
 # define LINUX_ADDRESS        (start_of_ram + 0x8000)
-# define LINUX_INITRD_ADDRESS (start_of_ram + 0x02000000)
+# define LINUX_INITRD_ADDRESS (start_of_ram + 0x03000000)
 # define LINUX_FDT_ADDRESS    (LINUX_INITRD_ADDRESS - 0x10000)
 static inline const void *
 grub_arm_firmware_get_boot_data (void)

@@ -29,31 +29,28 @@
 
 enum
   {
-    GRUB_NET_MAX_LINK_HEADER_SIZE = 96,
-    GRUB_NET_MAX_LINK_ADDRESS_SIZE = 32,
+    GRUB_NET_MAX_LINK_HEADER_SIZE = 64,
     GRUB_NET_UDP_HEADER_SIZE = 8,
     GRUB_NET_TCP_HEADER_SIZE = 20,
     GRUB_NET_OUR_IPV4_HEADER_SIZE = 20,
     GRUB_NET_OUR_IPV6_HEADER_SIZE = 40,
     GRUB_NET_OUR_MAX_IP_HEADER_SIZE = 40,
-    GRUB_NET_TCP_RESERVE_SIZE = GRUB_NET_TCP_HEADER_SIZE 
+    GRUB_NET_TCP_RESERVE_SIZE = GRUB_NET_TCP_HEADER_SIZE
     + GRUB_NET_OUR_IPV4_HEADER_SIZE
     + GRUB_NET_MAX_LINK_HEADER_SIZE
   };
 
-typedef enum grub_link_level_protocol_id 
+typedef enum grub_link_level_protocol_id
 {
-  /* IANA ARP constant to define hardware type. */
-  GRUB_NET_LINK_LEVEL_PROTOCOL_ETHERNET = 1,
+  GRUB_NET_LINK_LEVEL_PROTOCOL_ETHERNET
 } grub_link_level_protocol_id_t;
 
 typedef struct grub_net_link_level_address
 {
   grub_link_level_protocol_id_t type;
-  grub_uint8_t len;
   union
   {
-    grub_uint8_t mac[GRUB_NET_MAX_LINK_ADDRESS_SIZE];
+    grub_uint8_t mac[6];
   };
 } grub_net_link_level_address_t;
 
@@ -152,7 +149,7 @@ struct grub_net_card
 
 struct grub_net_network_level_interface;
 
-typedef enum grub_network_level_protocol_id 
+typedef enum grub_network_level_protocol_id
 {
   GRUB_NET_NETWORK_LEVEL_PROTOCOL_DHCP_RECV,
   GRUB_NET_NETWORK_LEVEL_PROTOCOL_IPV4,
@@ -185,11 +182,11 @@ typedef struct grub_net_network_level_netaddress
   {
     struct {
       grub_uint32_t base;
-      int masksize; 
+      int masksize;
     } ipv4;
     struct {
       grub_uint64_t base[2];
-      int masksize; 
+      int masksize;
     } ipv6;
   };
 } grub_net_network_level_netaddress_t;
@@ -255,7 +252,7 @@ typedef struct grub_net_app_protocol *grub_net_app_level_t;
 
 typedef struct grub_net_socket *grub_net_socket_t;
 
-struct grub_net_app_protocol 
+struct grub_net_app_protocol
 {
   struct grub_net_app_protocol *next;
   struct grub_net_app_protocol **prev;
@@ -273,7 +270,6 @@ typedef struct grub_net
 {
   char *server;
   char *name;
-  int port;
   grub_net_app_level_t protocol;
   grub_net_packets_t packs;
   grub_off_t offset;
@@ -296,7 +292,11 @@ struct grub_net_network_level_interface
   struct grub_net_bootp_packet *dhcp_ack;
   grub_size_t dhcp_acklen;
   grub_uint16_t vlantag;
-  grub_uint32_t dhcp_xid;
+  grub_uint32_t xid;      /* DHCPv4 transaction id */
+  grub_uint32_t srv_id;   /* DHCPv4 server_identifier */
+  grub_uint32_t my_ip;    /* DHCPv4 offered IP address */
+  unsigned dhcp_tmo_left; /* DHCPv4 running retransmission timeout */
+  unsigned dhcp_tmo;      /* DHCPv4 current retransmission timeout */
   void *data;
 };
 
@@ -434,7 +434,7 @@ struct grub_net_bootp_packet
   grub_uint8_t hw_type;		/* hardware type.  */
   grub_uint8_t hw_len;		/* hardware addr len.  */
   grub_uint8_t gate_hops;	/* zero it.  */
-  grub_uint32_t xid;		/* transaction id chosen by client.  */
+  grub_uint32_t ident;		/* random number chosen by client.  */
   grub_uint16_t seconds;	/* seconds since did initial bootstrap.  */
   grub_uint16_t flags;
   grub_uint32_t	client_ip;
@@ -447,66 +447,6 @@ struct grub_net_bootp_packet
   grub_uint8_t vendor[0];
 } GRUB_PACKED;
 
-struct grub_net_dhcp6_packet
-{
-  grub_uint32_t message_type:8;
-  grub_uint32_t transaction_id:24;
-  grub_uint8_t dhcp_options[0];
-} GRUB_PACKED;
-
-struct grub_net_dhcp6_option {
-  grub_uint16_t code;
-  grub_uint16_t len;
-  grub_uint8_t data[0];
-} GRUB_PACKED;
-
-struct grub_net_dhcp6_option_iana {
-  grub_uint32_t iaid;
-  grub_uint32_t t1;
-  grub_uint32_t t2;
-  grub_uint8_t data[0];
-} GRUB_PACKED;
-
-struct grub_net_dhcp6_option_iaaddr {
-  grub_uint8_t addr[16];
-  grub_uint32_t preferred_lifetime;
-  grub_uint32_t valid_lifetime;
-  grub_uint8_t data[0];
-} GRUB_PACKED;
-
-struct grub_net_dhcp6_option_duid_ll
-{
-  grub_uint16_t type;
-  grub_uint16_t hw_type;
-  grub_uint8_t hwaddr[6];
-} GRUB_PACKED;
-
-enum
-  {
-    GRUB_NET_DHCP6_SOLICIT = 1,
-    GRUB_NET_DHCP6_ADVERTISE = 2,
-    GRUB_NET_DHCP6_REQUEST = 3,
-    GRUB_NET_DHCP6_REPLY = 7
-  };
-
-enum
-  {
-    DHCP6_CLIENT_PORT = 546,
-    DHCP6_SERVER_PORT = 547
-  };
-
-enum
-  {
-    GRUB_NET_DHCP6_OPTION_CLIENTID = 1,
-    GRUB_NET_DHCP6_OPTION_SERVERID = 2,
-    GRUB_NET_DHCP6_OPTION_IA_NA = 3,
-    GRUB_NET_DHCP6_OPTION_IAADDR = 5,
-    GRUB_NET_DHCP6_OPTION_ORO = 6,
-    GRUB_NET_DHCP6_OPTION_ELAPSED_TIME = 8,
-    GRUB_NET_DHCP6_OPTION_DNS_SERVERS = 23,
-    GRUB_NET_DHCP6_OPTION_BOOTFILE_URL = 59
-  };
-
 #define	GRUB_NET_BOOTP_RFC1048_MAGIC_0	0x63
 #define	GRUB_NET_BOOTP_RFC1048_MAGIC_1	0x82
 #define	GRUB_NET_BOOTP_RFC1048_MAGIC_2	0x53
@@ -514,18 +454,24 @@ enum
 
 enum
   {
-    GRUB_NET_BOOTP_PAD = 0x00,
-    GRUB_NET_BOOTP_NETMASK = 0x01,
-    GRUB_NET_BOOTP_ROUTER = 0x03,
-    GRUB_NET_BOOTP_DNS = 0x06,
-    GRUB_NET_BOOTP_HOSTNAME = 0x0c,
-    GRUB_NET_BOOTP_DOMAIN = 0x0f,
-    GRUB_NET_BOOTP_ROOT_PATH = 0x11,
-    GRUB_NET_BOOTP_EXTENSIONS_PATH = 0x12,
-    GRUB_NET_BOOTP_VENDOR_CLASS_IDENTIFIER = 0x3C,
-    GRUB_NET_BOOTP_CLIENT_ID = 0x3d,
-    GRUB_NET_BOOTP_CLIENT_UUID = 0x61,
-    GRUB_NET_BOOTP_END = 0xff
+    GRUB_NET_BOOTP_PAD = 0,
+    GRUB_NET_BOOTP_NETMASK = 1,
+    GRUB_NET_BOOTP_ROUTER = 3,
+    GRUB_NET_BOOTP_DNS = 6,
+    GRUB_NET_BOOTP_HOSTNAME = 12,
+    GRUB_NET_BOOTP_DOMAIN = 15,
+    GRUB_NET_BOOTP_ROOT_PATH = 17,
+    GRUB_NET_BOOTP_EXTENSIONS_PATH = 18,
+    GRUB_NET_DHCP_REQUESTED_IP_ADDRESS = 50,
+    GRUB_NET_DHCP_OVERLOAD = 52,
+    GRUB_NET_DHCP_MESSAGE_TYPE = 53,
+    GRUB_NET_DHCP_SERVER_IDENTIFIER = 54,
+    GRUB_NET_DHCP_PARAMETER_REQUEST_LIST = 55,
+    GRUB_NET_BOOTP_CLIENT_ID = 61,
+    GRUB_NET_DHCP_TFTP_SERVER_NAME = 66,
+    GRUB_NET_DHCP_BOOTFILE_NAME = 67,
+    GRUB_NET_BOOTP_CLIENT_UUID = 97,
+    GRUB_NET_BOOTP_END = 255
   };
 
 struct grub_net_network_level_interface *
@@ -536,32 +482,13 @@ grub_net_configure_by_dhcp_ack (const char *name,
 				grub_size_t size,
 				int is_def, char **device, char **path);
 
-struct grub_net_network_level_interface *
-grub_net_configure_by_dhcpv6_reply (const char *name,
-				    struct grub_net_card *card,
-				    grub_net_interface_flags_t flags,
-				    const struct grub_net_dhcp6_packet *v6,
-				    grub_size_t size,
-				    int is_def, char **device, char **path);
-
-int
-grub_ipv6_get_masksize(grub_uint16_t *mask);
-
-grub_err_t
-grub_net_add_ipv6_local (struct grub_net_network_level_interface *inf,
-			 int mask);
-
 grub_err_t
 grub_net_add_ipv4_local (struct grub_net_network_level_interface *inf,
 			 int mask);
 
 void
 grub_net_process_dhcp (struct grub_net_buff *nb,
-		       struct grub_net_card *card);
-
-grub_err_t
-grub_net_process_dhcp6 (struct grub_net_buff *nb,
-			struct grub_net_card *card);
+		       struct grub_net_network_level_interface *iface);
 
 int
 grub_net_hwaddr_cmp (const grub_net_link_level_address_t *a,
@@ -579,19 +506,23 @@ grub_net_addr_cmp (const grub_net_network_level_address_t *a,
 #define GRUB_NET_MAX_STR_ADDR_LEN sizeof ("XXXX:XXXX:XXXX:XXXX:XXXX:XXXX:XXXX:XXXX")
 
 /*
-  Up to 32 byte hardware address supported, see GRUB_NET_MAX_LINK_ADDRESS_SIZE
+  Currently suppoerted adresses:
+  ethernet:   XX:XX:XX:XX:XX:XX
  */
-#define GRUB_NET_MAX_STR_HWADDR_LEN (sizeof (\
-	"XX:XX:XX:XX:XX:XX:XX:XX:"\
-	"XX:XX:XX:XX:XX:XX:XX:XX:"\
-	"XX:XX:XX:XX:XX:XX:XX:XX:"\
-	"XX:XX:XX:XX:XX:XX:XX:XX"))
+
+#define GRUB_NET_MAX_STR_HWADDR_LEN (sizeof ("XX:XX:XX:XX:XX:XX"))
+
+/* Max VLAN id = 4094 */
+#define GRUB_NET_MAX_STR_VLAN_LEN (sizeof ("vlanXXXX"))
 
 void
 grub_net_addr_to_str (const grub_net_network_level_address_t *target,
 		      char *buf);
 void
 grub_net_hwaddr_to_str (const grub_net_link_level_address_t *addr, char *str);
+
+void
+grub_net_vlan_to_str (grub_uint16_t vlantag, char *str);
 
 grub_err_t
 grub_env_set_net_property (const char *intername, const char *suffix,
@@ -644,6 +575,8 @@ grub_net_add_dns_server (const struct grub_net_network_level_address *s);
 void
 grub_net_remove_dns_server (const struct grub_net_network_level_address *s);
 
+grub_err_t
+grub_net_search_config_file (char *config);
 
 extern char *grub_net_default_server;
 
@@ -652,8 +585,5 @@ extern char *grub_net_default_server;
 #define GRUB_NET_INTERVAL_ADDITION 20
 
 #define VLANTAG_IDENTIFIER 0x8100
-
-grub_err_t
-grub_net_search_configfile (char *config);
 
 #endif /* ! GRUB_NET_HEADER */

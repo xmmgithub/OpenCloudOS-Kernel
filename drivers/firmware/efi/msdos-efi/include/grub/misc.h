@@ -28,10 +28,10 @@
 #include <grub/compiler.h>
 
 #define ALIGN_UP(addr, align) \
-	((addr + (typeof (addr)) align - 1) & ~((typeof (addr)) align - 1))
+	(((addr) + (typeof (addr)) (align) - 1) & ~((typeof (addr)) (align) - 1))
 #define ALIGN_UP_OVERHEAD(addr, align) ((-(addr)) & ((typeof (addr)) (align) - 1))
 #define ALIGN_DOWN(addr, align) \
-	((addr) & ~((typeof (addr)) align - 1))
+	((addr) & ~((typeof (addr)) (align) - 1))
 #define ARRAY_SIZE(array) (sizeof (array) / sizeof (array[0]))
 #define COMPILE_TIME_ASSERT(cond) switch (0) { case 1: case !(cond): ; }
 
@@ -85,7 +85,6 @@ int EXPORT_FUNC(grub_strncmp) (const char *s1, const char *s2, grub_size_t n);
 
 char *EXPORT_FUNC(grub_strchr) (const char *s, int c);
 char *EXPORT_FUNC(grub_strrchr) (const char *s, int c);
-char *EXPORT_FUNC(grub_strchrnul) (const char *s, int c);
 int EXPORT_FUNC(grub_strword) (const char *s, const char *w);
 
 /* Copied from gnulib.
@@ -208,50 +207,6 @@ grub_toupper (int c)
   return c;
 }
 
-static inline char *
-grub_strcasestr (const char *haystack, const char *needle)
-{
-  /* Be careful not to look at the entire extent of haystack or needle
-     until needed.  This is useful because of these two cases:
-       - haystack may be very long, and a match of needle found early,
-       - needle may be very long, and not even a short initial segment of
-       needle may be found in haystack.  */
-  if (*needle != '\0')
-    {
-      /* Speed up the following searches of needle by caching its first
-	 character.  */
-      char b = *needle++;
-
-      for (;; haystack++)
-	{
-	  if (*haystack == '\0')
-	    /* No match.  */
-	    return 0;
-	  if (grub_tolower(*haystack) == grub_tolower(b))
-	    /* The first character matches.  */
-	    {
-	      const char *rhaystack = haystack + 1;
-	      const char *rneedle = needle;
-
-	      for (;; rhaystack++, rneedle++)
-		{
-		  if (*rneedle == '\0')
-		    /* Found a match.  */
-		    return (char *) haystack;
-		  if (*rhaystack == '\0')
-		    /* No match.  */
-		    return 0;
-		  if (grub_tolower(*rhaystack) != grub_tolower(*rneedle))
-		    /* Nothing in this round.  */
-		    break;
-		}
-	    }
-	}
-    }
-  else
-    return (char *) haystack;
-}
-
 static inline int
 grub_strcasecmp (const char *s1, const char *s2)
 {
@@ -288,11 +243,29 @@ grub_strncasecmp (const char *s1, const char *s2, grub_size_t n)
     - (int) grub_tolower ((grub_uint8_t) *s2);
 }
 
-unsigned long EXPORT_FUNC(grub_strtoul) (const char *str, const char ** const end, int base);
-unsigned long long EXPORT_FUNC(grub_strtoull) (const char *str, const char ** const end, int base);
+/*
+ * Note that these differ from the C standard's definitions of strtol,
+ * strtoul(), and strtoull() by the addition of two const qualifiers on the end
+ * pointer, which make the declaration match the *semantic* requirements of
+ * their behavior.  This means that instead of:
+ *
+ *  char *s = "1234 abcd";
+ *  char *end;
+ *  unsigned long l;
+ *
+ *  l = grub_strtoul(s, &end, 10);
+ *
+ * We must one of:
+ *
+ *  const char *end;
+ *  ... or ...
+ *  l = grub_strtoul(s, (const char ** const)&end, 10);
+ */
+unsigned long EXPORT_FUNC(grub_strtoul) (const char * restrict str, const char ** const restrict end, int base);
+unsigned long long EXPORT_FUNC(grub_strtoull) (const char * restrict str, const char ** const restrict end, int base);
 
 static inline long
-grub_strtol (const char *str, const char ** const end, int base)
+grub_strtol (const char * restrict str, const char ** const restrict end, int base)
 {
   int negative = 0;
   unsigned long long magnitude;
@@ -372,8 +345,6 @@ void EXPORT_FUNC(grub_real_dprintf) (const char *file,
                                      const int line,
                                      const char *condition,
                                      const char *fmt, ...) __attribute__ ((format (GNU_PRINTF, 4, 5)));
-void EXPORT_FUNC(grub_qdprintf) (const char *condition,
-				 const char *fmt, ...) __attribute__ ((format (GNU_PRINTF, 2, 3)));
 int EXPORT_FUNC(grub_vprintf) (const char *fmt, va_list args);
 int EXPORT_FUNC(grub_snprintf) (char *str, grub_size_t n, const char *fmt, ...)
      __attribute__ ((format (GNU_PRINTF, 3, 4)));
@@ -382,13 +353,14 @@ int EXPORT_FUNC(grub_vsnprintf) (char *str, grub_size_t n, const char *fmt,
 char *EXPORT_FUNC(grub_xasprintf) (const char *fmt, ...)
      __attribute__ ((format (GNU_PRINTF, 1, 2))) WARN_UNUSED_RESULT;
 char *EXPORT_FUNC(grub_xvasprintf) (const char *fmt, va_list args) WARN_UNUSED_RESULT;
-void EXPORT_FUNC(grub_exit) (int rc) __attribute__ ((noreturn));
+void EXPORT_FUNC(grub_exit) (void) __attribute__ ((noreturn));
 grub_uint64_t EXPORT_FUNC(grub_divmod64) (grub_uint64_t n,
 					  grub_uint64_t d,
 					  grub_uint64_t *r);
 
 /* Must match softdiv group in gentpl.py.  */
-#if !defined(GRUB_MACHINE_EMU) && (defined(__arm__) || defined(__ia64__))
+#if !defined(GRUB_MACHINE_EMU) && (defined(__arm__) || defined(__ia64__) || \
+    (defined(__riscv) && (__riscv_xlen == 32)))
 #define GRUB_DIVISION_IN_SOFTWARE 1
 #else
 #define GRUB_DIVISION_IN_SOFTWARE 0
@@ -487,6 +459,22 @@ grub_error_load (const struct grub_error_saved *save)
   grub_errno = save->grub_errno;
 }
 
+/*
+ * grub_printf_fmt_checks() a fmt string for printf() against an expected
+ * format. It is intended for cases where the fmt string could come from
+ * an outside source and cannot be trusted.
+ *
+ * While expected fmt accepts a printf() format string it should be kept
+ * as simple as possible. The printf() format strings with positional
+ * parameters are NOT accepted, neither for fmt nor for fmt_expected.
+ *
+ * The fmt is accepted if it has equal or less arguments than fmt_expected
+ * and if the type of all arguments match.
+ *
+ * Returns GRUB_ERR_NONE if fmt is acceptable.
+ */
+grub_err_t EXPORT_FUNC (grub_printf_fmt_check) (const char *fmt, const char *fmt_expected);
+
 #if BOOT_TIME_STATS
 struct grub_boot_time
 {
@@ -509,5 +497,7 @@ void EXPORT_FUNC(grub_real_boot_time) (const char *file,
 
 #define grub_max(a, b) (((a) > (b)) ? (a) : (b))
 #define grub_min(a, b) (((a) < (b)) ? (a) : (b))
+
+#define grub_log2ull(n) (GRUB_TYPE_BITS (grub_uint64_t) - __builtin_clzll (n) - 1)
 
 #endif /* ! GRUB_MISC_HEADER */

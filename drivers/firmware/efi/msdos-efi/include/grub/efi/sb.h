@@ -1,7 +1,6 @@
-/* sb.h - declare functions for EFI Secure Boot support */
 /*
  *  GRUB  --  GRand Unified Bootloader
- *  Copyright (C) 2006,2007,2008,2009  Free Software Foundation, Inc.
+ *  Copyright (C) 2020  Free Software Foundation, Inc.
  *
  *  GRUB is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -17,13 +16,28 @@
  *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef GRUB_EFI_SB_HEADER
-#define GRUB_EFI_SB_HEADER	1
+#ifndef GRUB_EFI_SB_H
+#define GRUB_EFI_SB_H     1
 
 #include <grub/types.h>
 #include <grub/dl.h>
 
-/* Functions.  */
-int EXPORT_FUNC (grub_efi_secure_boot) (void);
+#define GRUB_EFI_SECUREBOOT_MODE_UNSET	0
+#define GRUB_EFI_SECUREBOOT_MODE_UNKNOWN	1
+#define GRUB_EFI_SECUREBOOT_MODE_DISABLED	2
+#define GRUB_EFI_SECUREBOOT_MODE_ENABLED	3
 
-#endif /* ! GRUB_EFI_SB_HEADER */
+#ifdef GRUB_MACHINE_EFI
+extern grub_uint8_t
+EXPORT_FUNC (grub_efi_get_secureboot) (void);
+
+extern void
+grub_shim_lock_verifier_setup (void);
+#else
+static inline grub_uint8_t
+grub_efi_get_secureboot (void)
+{
+  return GRUB_EFI_SECUREBOOT_MODE_UNSET;
+}
+#endif
+#endif /* GRUB_EFI_SB_H */

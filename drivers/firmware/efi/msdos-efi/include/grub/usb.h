@@ -23,6 +23,10 @@
 #include <grub/usbdesc.h>
 #include <grub/usbtrans.h>
 
+#define GRUB_USB_MAX_CONF    8
+#define GRUB_USB_MAX_IF      32
+#define GRUB_USB_MAX_TOGGLE  256
+
 typedef struct grub_usb_device *grub_usb_device_t;
 typedef struct grub_usb_controller *grub_usb_controller_t;
 typedef struct grub_usb_controller_dev *grub_usb_controller_dev_t;
@@ -130,7 +134,7 @@ struct grub_usb_controller_dev
   /* Value is calculated/estimated in driver - some TDs should be */
   /* reserved for posible concurrent control or "interrupt" transfers */
   grub_size_t max_bulk_tds;
-  
+
   /* The next host controller.  */
   struct grub_usb_controller_dev *next;
 };
@@ -167,14 +171,14 @@ struct grub_usb_configuration
   struct grub_usb_desc_config *descconf;
 
   /* Interfaces associated to this configuration.  */
-  struct grub_usb_interface interf[32];
+  struct grub_usb_interface interf[GRUB_USB_MAX_IF];
 };
 
 struct grub_usb_hub_port
 {
   grub_uint64_t soft_limit_time;
   grub_uint64_t hard_limit_time;
-  enum { 
+  enum {
     PORT_STATE_NORMAL = 0,
     PORT_STATE_WAITING_FOR_STABLE_POWER = 1,
     PORT_STATE_FAILED_DEVICE = 2,
@@ -191,7 +195,7 @@ struct grub_usb_device
   struct grub_usb_controller controller;
 
   /* Device configurations (after opening the device).  */
-  struct grub_usb_configuration config[8];
+  struct grub_usb_configuration config[GRUB_USB_MAX_CONF];
 
   /* Device address.  */
   int addr;
@@ -203,7 +207,7 @@ struct grub_usb_device
   int initialized;
 
   /* Data toggle values (used for bulk transfers only).  */
-  int toggle[256];
+  int toggle[GRUB_USB_MAX_TOGGLE];
 
   /* Used by libusb wrapper.  Schedulded for removal. */
   void *data;

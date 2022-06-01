@@ -103,12 +103,12 @@ struct grub_diskfilter_lv {
 struct grub_diskfilter_segment {
   grub_uint64_t start_extent;
   grub_uint64_t extent_count;
-  enum 
+  enum
     {
       GRUB_DISKFILTER_STRIPED = 0,
       GRUB_DISKFILTER_MIRROR = 1,
       GRUB_DISKFILTER_RAID4 = 4,
-      GRUB_DISKFILTER_RAID5 = 5,      
+      GRUB_DISKFILTER_RAID5 = 5,
       GRUB_DISKFILTER_RAID6 = 6,
       GRUB_DISKFILTER_RAID10 = 10,
   } type;
@@ -188,6 +188,15 @@ typedef grub_err_t (*grub_raid6_recover_func_t) (struct grub_diskfilter_segment 
 
 extern grub_raid5_recover_func_t grub_raid5_recover_func;
 extern grub_raid6_recover_func_t grub_raid6_recover_func;
+
+typedef grub_err_t (* raid_recover_read_t)(void *data, int disk_nr,
+					   grub_uint64_t addr, void *dest,
+					   grub_size_t size);
+
+extern grub_err_t
+grub_raid6_recover_gen (void *data, grub_uint64_t nstripes, int disknr, int p,
+			    char *buf, grub_uint64_t sector, grub_size_t size,
+			    int layout, raid_recover_read_t read_func);
 
 grub_err_t grub_diskfilter_vg_register (struct grub_diskfilter_vg *vg);
 

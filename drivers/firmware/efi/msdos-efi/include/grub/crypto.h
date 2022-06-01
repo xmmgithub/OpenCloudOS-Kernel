@@ -28,7 +28,7 @@
 #include <grub/err.h>
 #include <grub/mm.h>
 
-typedef enum 
+typedef enum
   {
     GPG_ERR_NO_ERROR,
     GPG_ERR_BAD_MPI,
@@ -56,7 +56,6 @@ typedef enum
     GPG_ERR_NOT_FOUND,
     GPG_ERR_NOT_IMPLEMENTED,
     GPG_ERR_NOT_SUPPORTED,
-    GPG_ERROR_CFLAGS,
     GPG_ERR_PUBKEY_ALGO,
     GPG_ERR_SELFTEST_FAILED,
     GPG_ERR_TOO_SHORT,
@@ -73,7 +72,7 @@ typedef gpg_error_t gcry_error_t;
 typedef gpg_err_code_t gcry_err_code_t;
 #define gcry_error_t gcry_err_code_t
 #if 0
-enum gcry_cipher_modes 
+enum gcry_cipher_modes
   {
     GCRY_CIPHER_MODE_NONE   = 0,  /* Not yet specified. */
     GCRY_CIPHER_MODE_ECB    = 1,  /* Electronic codebook. */
@@ -327,13 +326,13 @@ gcry_err_code_t
 grub_crypto_cbc_decrypt (grub_crypto_cipher_handle_t cipher,
 			 void *out, const void *in, grub_size_t size,
 			 void *iv);
-void 
+void
 grub_cipher_register (gcry_cipher_spec_t *cipher);
 void
 grub_cipher_unregister (gcry_cipher_spec_t *cipher);
-void 
+void
 grub_md_register (gcry_md_spec_t *digest);
-void 
+void
 grub_md_unregister (gcry_md_spec_t *cipher);
 
 extern struct gcry_pk_spec *grub_crypto_pk_dsa;

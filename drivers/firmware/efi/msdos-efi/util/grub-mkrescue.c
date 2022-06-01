@@ -150,7 +150,7 @@ enum {
   SYS_AREA_ARCS
 } system_area = SYS_AREA_AUTO;
 
-static error_t 
+static error_t
 argp_parser (int key, char *arg, struct argp_state *state)
 {
   if (grub_install_parse (key, arg))
@@ -229,6 +229,7 @@ write_part (FILE *f, const char *srcdir)
   char *inname = grub_util_path_concat (2, srcdir, "partmap.lst");
   char buf[260];
   in = grub_util_fopen (inname, "rb");
+  free (inname);
   if (!in)
     return;
   while (fgets (buf, 256, in))
@@ -441,8 +442,8 @@ main (int argc, char *argv[])
   xorriso = xstrdup ("xorriso");
   label_font = grub_util_path_concat (2, pkgdatadir, "unicode.pf2");
 
-  argp_argv = xmalloc (sizeof (argp_argv[0]) * argc);
-  xorriso_tail_argv = xmalloc (sizeof (argp_argv[0]) * argc);
+  argp_argv = xcalloc (argc, sizeof (argp_argv[0]));
+  xorriso_tail_argv = xcalloc (argc, sizeof (argp_argv[0]));
 
   xorriso_tail_argc = 0;
   /* Program name */
@@ -494,7 +495,7 @@ main (int argc, char *argv[])
   xorriso_push ("-as");
   xorriso_push ("mkisofs");
   xorriso_push ("-graft-points");
-  
+
   iso9660_dir = grub_util_make_temporary_dir ();
   grub_util_info ("temporary iso9660 dir is `%s'", iso9660_dir);
   boot_grub = grub_util_path_concat (3, iso9660_dir, "boot", "grub");
@@ -530,6 +531,9 @@ main (int argc, char *argv[])
 			       boot_grub, plat);
       source_dirs[plat] = xstrdup (grub_install_source_directory);
     }
+
+  grub_set_install_backup_ponr ();
+
   if (system_area == SYS_AREA_AUTO || grub_install_source_directory)
     {
       if (source_dirs[GRUB_INSTALL_PLATFORM_I386_PC]
@@ -538,6 +542,8 @@ main (int argc, char *argv[])
 	  || source_dirs[GRUB_INSTALL_PLATFORM_IA64_EFI]
 	  || source_dirs[GRUB_INSTALL_PLATFORM_ARM_EFI]
 	  || source_dirs[GRUB_INSTALL_PLATFORM_ARM64_EFI]
+	  || source_dirs[GRUB_INSTALL_PLATFORM_RISCV32_EFI]
+	  || source_dirs[GRUB_INSTALL_PLATFORM_RISCV64_EFI]
 	  || source_dirs[GRUB_INSTALL_PLATFORM_X86_64_EFI])
 	system_area = SYS_AREA_COMMON;
       else if (source_dirs[GRUB_INSTALL_PLATFORM_SPARC64_IEEE1275])
@@ -633,7 +639,7 @@ main (int argc, char *argv[])
 				 strerror (errno));
 	      fclose (bi);
 	      fwrite (buf, 1, 512, sa);
-	      
+
 	      grub_install_make_image_wrap_file (source_dirs[GRUB_INSTALL_PLATFORM_I386_PC],
 						 "/boot/grub", sa, sysarea_img,
 						 0, load_cfg,
@@ -642,7 +648,7 @@ main (int argc, char *argv[])
 	      fflush (sa);
 	      grub_util_fd_sync (fileno (sa));
 	      fclose (sa);
-	      
+
 	      if (sz > 32768)
 		{
 		  grub_util_warn ("%s", _("Your xorriso doesn't support `--grub2-boot-info'. Your core image is too big. Boot as disk is disabled. Please use xorriso 1.2.9 or later."));
@@ -735,7 +741,9 @@ main (int argc, char *argv[])
       || source_dirs[GRUB_INSTALL_PLATFORM_X86_64_EFI]
       || source_dirs[GRUB_INSTALL_PLATFORM_IA64_EFI]
       || source_dirs[GRUB_INSTALL_PLATFORM_ARM_EFI]
-      || source_dirs[GRUB_INSTALL_PLATFORM_ARM64_EFI])
+      || source_dirs[GRUB_INSTALL_PLATFORM_ARM64_EFI]
+      || source_dirs[GRUB_INSTALL_PLATFORM_RISCV32_EFI]
+      || source_dirs[GRUB_INSTALL_PLATFORM_RISCV64_EFI])
     {
       char *efidir = grub_util_make_temporary_dir ();
       char *efidir_efi = grub_util_path_concat (2, efidir, "efi");
@@ -770,6 +778,16 @@ main (int argc, char *argv[])
 			     imgname);
       free (imgname);
 
+      imgname = grub_util_path_concat (2, efidir_efi_boot, "bootriscv32.efi");
+      make_image_fwdisk_abs (GRUB_INSTALL_PLATFORM_RISCV32_EFI, "riscv32-efi",
+			     imgname);
+      free (imgname);
+
+      imgname = grub_util_path_concat (2, efidir_efi_boot, "bootriscv64.efi");
+      make_image_fwdisk_abs (GRUB_INSTALL_PLATFORM_RISCV64_EFI, "riscv64-efi",
+			     imgname);
+      free (imgname);
+
       if (source_dirs[GRUB_INSTALL_PLATFORM_I386_EFI])
 	{
 	  imgname = grub_util_path_concat (2, efidir_efi_boot, "boot.efi");
@@ -801,7 +819,7 @@ main (int argc, char *argv[])
 	grub_util_error ("`%s` invocation failed\n", "mformat");
       rv = grub_util_exec ((const char * []) { "mcopy", "-s", "-i", efiimgfat, efidir_efi, "::/", NULL });
       if (rv != 0)
-	grub_util_error ("`%s` invocation failed\n", "mformat");
+	grub_util_error ("`%s` invocation failed\n", "mcopy");
       xorriso_push ("--efi-boot");
       xorriso_push ("efi.img");
       xorriso_push ("-efi-boot-part");

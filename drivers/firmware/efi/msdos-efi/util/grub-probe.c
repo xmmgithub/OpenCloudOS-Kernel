@@ -171,9 +171,9 @@ probe_partmap (grub_disk_t disk, char delim)
     grub_diskfilter_get_partmap (disk, do_print, &delim);
 
   /* In case of LVM/RAID, check the member devices as well.  */
-  if (disk->dev->memberlist)
+  if (disk->dev->disk_memberlist)
     {
-      list = disk->dev->memberlist (disk);
+      list = disk->dev->disk_memberlist (disk);
     }
   while (list)
     {
@@ -229,9 +229,9 @@ probe_cryptodisk_uuid (grub_disk_t disk, char delim)
   grub_disk_memberlist_t list = NULL, tmp;
 
   /* In case of LVM/RAID, check the member devices as well.  */
-  if (disk->dev->memberlist)
+  if (disk->dev->disk_memberlist)
     {
-      list = disk->dev->memberlist (disk);
+      list = disk->dev->disk_memberlist (disk);
     }
   while (list)
     {
@@ -272,8 +272,8 @@ probe_abstraction (grub_disk_t disk, char delim)
   grub_disk_memberlist_t list = NULL, tmp;
   int raid_level;
 
-  if (disk->dev->memberlist)
-    list = disk->dev->memberlist (disk);
+  if (disk->dev->disk_memberlist)
+    list = disk->dev->disk_memberlist (disk);
   while (list)
     {
       probe_abstraction (list->disk, delim);
@@ -299,8 +299,8 @@ probe_abstraction (grub_disk_t disk, char delim)
   if (raid_level >= 0)
     {
       printf ("diskfilter%c", delim);
-      if (disk->dev->raidname)
-	printf ("%s%c", disk->dev->raidname (disk), delim);
+      if (disk->dev->disk_raidname)
+	printf ("%s%c", disk->dev->disk_raidname (disk), delim);
     }
   if (raid_level == 5)
     printf ("raid5rec%c", delim);
@@ -361,8 +361,8 @@ probe (const char *path, char **device_names, char delim)
       grub_util_pull_device (*curdev);
       ndev++;
     }
-  
-  drives_names = xmalloc (sizeof (drives_names[0]) * (ndev + 1)); 
+
+  drives_names = xcalloc (ndev + 1, sizeof (drives_names[0]));
 
   for (curdev = device_names, curdrive = drives_names; *curdev; curdev++,
        curdrive++)
@@ -398,7 +398,7 @@ probe (const char *path, char **device_names, char delim)
 	  if (! dev || !dev->disk)
 	    grub_util_error ("%s", grub_errmsg);
 
-	  dsize = grub_disk_get_size (dev->disk);
+	  dsize = grub_disk_native_sectors (dev->disk);
 	  for (addr = 0; addr < dsize;
 	       addr += sizeof (buffer) / GRUB_DISK_SECTOR_SIZE)
 	    {
@@ -433,7 +433,7 @@ probe (const char *path, char **device_names, char delim)
       dev = grub_device_open (drives_names[0]);
       if (! dev)
 	grub_util_error ("%s", grub_errmsg);
-      
+
       fs = grub_fs_probe (dev);
       if (! fs)
 	grub_util_error ("%s", grub_errmsg);
@@ -446,10 +446,10 @@ probe (const char *path, char **device_names, char delim)
       else if (print == PRINT_FS_UUID)
 	{
 	  char *uuid;
-	  if (! fs->uuid)
+	  if (! fs->fs_uuid)
 	    grub_util_error (_("%s does not support UUIDs"), fs->name);
 
-	  if (fs->uuid (dev, &uuid) != GRUB_ERR_NONE)
+	  if (fs->fs_uuid (dev, &uuid) != GRUB_ERR_NONE)
 	    grub_util_error ("%s", grub_errmsg);
 
 	  printf ("%s", uuid);
@@ -458,11 +458,11 @@ probe (const char *path, char **device_names, char delim)
       else if (print == PRINT_FS_LABEL)
 	{
 	  char *label;
-	  if (! fs->label)
+	  if (! fs->fs_label)
 	    grub_util_error (_("filesystem `%s' does not support labels"),
 			     fs->name);
 
-	  if (fs->label (dev, &label) != GRUB_ERR_NONE)
+	  if (fs->fs_label (dev, &label) != GRUB_ERR_NONE)
 	    grub_util_error ("%s", grub_errmsg);
 
 	  printf ("%s", label);
@@ -543,7 +543,7 @@ probe (const char *path, char **device_names, char delim)
 	  else
 	    printf ("\n");
 	}
-      
+
       else if ((print == PRINT_COMPATIBILITY_HINT || print == PRINT_BIOS_HINT
 	   || print == PRINT_IEEE1275_HINT || print == PRINT_BAREMETAL_HINT
 	   || print == PRINT_EFI_HINT || print == PRINT_ARC_HINT)

@@ -37,7 +37,6 @@ struct grub_util_config
 {
   int is_cryptodisk_enabled;
   char *grub_distributor;
-  int is_suse_btrfs_snapshot_enabled;
 };
 
 void

@@ -48,11 +48,18 @@ typedef enum
 
 #define GRUB_CRYPTODISK_MAX_UUID_LENGTH 71
 
+/* LUKS1 specification defines the block size to always be 512 bytes. */
+#define GRUB_LUKS1_LOG_SECTOR_SIZE  9
+
+/* By default dm-crypt increments the IV every 512 bytes. */
+#define GRUB_CRYPTODISK_IV_LOG_SIZE 9
+
 #define GRUB_CRYPTODISK_GF_LOG_SIZE 7
 #define GRUB_CRYPTODISK_GF_SIZE (1U << GRUB_CRYPTODISK_GF_LOG_SIZE)
 #define GRUB_CRYPTODISK_GF_LOG_BYTES (GRUB_CRYPTODISK_GF_LOG_SIZE - 3)
 #define GRUB_CRYPTODISK_GF_BYTES (1U << GRUB_CRYPTODISK_GF_LOG_BYTES)
 #define GRUB_CRYPTODISK_MAX_KEYLEN 128
+#define GRUB_CRYPTODISK_MAX_PASSPHRASE 256
 
 struct grub_cryptodisk;
 
@@ -60,14 +67,32 @@ typedef gcry_err_code_t
 (*grub_cryptodisk_rekey_func_t) (struct grub_cryptodisk *dev,
 				 grub_uint64_t zoneno);
 
+struct grub_cryptomount_args
+{
+  /* scan: Flag to indicate that only bootable volumes should be decrypted */
+  grub_uint32_t check_boot : 1;
+  /* scan: Only volumes matching this UUID should be decrpyted */
+  char *search_uuid;
+  /* recover_key: Key data used to decrypt voume */
+  grub_uint8_t *key_data;
+  /* recover_key: Length of key_data */
+  grub_size_t key_len;
+};
+typedef struct grub_cryptomount_args *grub_cryptomount_args_t;
+
 struct grub_cryptodisk
 {
   struct grub_cryptodisk *next;
   struct grub_cryptodisk **prev;
 
   char *source;
-  grub_disk_addr_t offset;
-  grub_disk_addr_t total_length;
+  /*
+   * The number of sectors the start of the encrypted data is offset into the
+   * underlying disk, where sectors are the size noted by log_sector_size.
+   */
+  grub_disk_addr_t offset_sectors;
+  /* Total number of encrypted sectors of size (1 << log_sector_size). */
+  grub_disk_addr_t total_sectors;
   grub_disk_t source_disk;
   int ref;
   grub_crypto_cipher_handle_t cipher;
@@ -106,9 +131,8 @@ struct grub_cryptodisk_dev
   struct grub_cryptodisk_dev *next;
   struct grub_cryptodisk_dev **prev;
 
-  grub_cryptodisk_t (*scan) (grub_disk_t disk, const char *check_uuid,
-			     int boot_only);
-  grub_err_t (*recover_key) (grub_disk_t disk, grub_cryptodisk_t dev);
+  grub_cryptodisk_t (*scan) (grub_disk_t disk, grub_cryptomount_args_t cargs);
+  grub_err_t (*recover_key) (grub_disk_t disk, grub_cryptodisk_t dev, grub_cryptomount_args_t cargs);
 };
 typedef struct grub_cryptodisk_dev *grub_cryptodisk_dev_t;
 
@@ -130,13 +154,16 @@ grub_cryptodisk_dev_unregister (grub_cryptodisk_dev_t cr)
 
 #define FOR_CRYPTODISK_DEVS(var) FOR_LIST_ELEMENTS((var), (grub_cryptodisk_list))
 
+grub_err_t
+grub_cryptodisk_setcipher (grub_cryptodisk_t crypt, const char *ciphername, const char *ciphermode);
+
 gcry_err_code_t
 grub_cryptodisk_setkey (grub_cryptodisk_t dev,
 			grub_uint8_t *key, grub_size_t keysize);
 gcry_err_code_t
 grub_cryptodisk_decrypt (struct grub_cryptodisk *dev,
 			 grub_uint8_t * data, grub_size_t len,
-			 grub_disk_addr_t sector);
+			 grub_disk_addr_t sector, grub_size_t log_sector_size);
 grub_err_t
 grub_cryptodisk_insert (grub_cryptodisk_t newdev, const char *name,
 			grub_disk_t source);

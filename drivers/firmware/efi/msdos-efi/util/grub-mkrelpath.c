@@ -40,11 +40,8 @@ struct arguments
 };
 
 static struct argp_option options[] = {
-  {"relative",  'r', 0, 0, "use relative path on btrfs", 0},
   { 0, 0, 0, 0, 0, 0 }
 };
-
-extern int use_relative_path_on_btrfs;
 
 static error_t
 argp_parser (int key, char *arg, struct argp_state *state)
@@ -55,9 +52,6 @@ argp_parser (int key, char *arg, struct argp_state *state)
 
   switch (key)
     {
-    case 'r':
-      use_relative_path_on_btrfs = 1;
-      break;
     case ARGP_KEY_ARG:
       if (state->arg_num == 0)
 	arguments->pathname = xstrdup (arg);

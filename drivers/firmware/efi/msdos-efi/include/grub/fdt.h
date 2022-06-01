@@ -19,10 +19,11 @@
 #ifndef GRUB_FDT_HEADER
 #define GRUB_FDT_HEADER	1
 
-#if defined(__arm__) || defined(__aarch64__)
-
 #include <grub/types.h>
 #include <grub/symbol.h>
+
+/* Space required when preparing the /chosen node after boot has been called. */
+#define GRUB_EFI_LINUX_FDT_EXTRA_SPACE 0x400
 
 #define FDT_MAGIC 0xD00DFEED
 
@@ -142,7 +143,5 @@ int EXPORT_FUNC(grub_fdt_set_prop) (void *fdt, unsigned int nodeoffset, const ch
   reg_64[1] = grub_cpu_to_be64(size); \
   grub_fdt_set_prop ((fdt), (nodeoffset), "reg", reg_64, 16);  \
 })
-
-#endif /* defined(__arm__) || defined(__aarch64__) */
 
 #endif	/* ! GRUB_FDT_HEADER */

@@ -29,7 +29,8 @@ enum
   OBJ_TYPE_CONFIG,
   OBJ_TYPE_PREFIX,
   OBJ_TYPE_PUBKEY,
-  OBJ_TYPE_DTB
+  OBJ_TYPE_DTB,
+  OBJ_TYPE_DISABLE_SHIM_LOCK
 };
 
 /* The module header.  */
@@ -79,7 +80,9 @@ struct grub_module_info64
 #if defined (GRUB_MACHINE_PCBIOS) || defined (GRUB_MACHINE_COREBOOT) \
   || defined (GRUB_MACHINE_MULTIBOOT) || defined (GRUB_MACHINE_MIPS_QEMU_MIPS) \
   || defined (GRUB_MACHINE_MIPS_LOONGSON) || defined (GRUB_MACHINE_ARC) \
-  || (defined (__sparc__) && defined (GRUB_MACHINE_IEEE1275)) || defined (GRUB_MACHINE_UBOOT) || defined (GRUB_MACHINE_XEN)
+  || (defined (__sparc__) && defined (GRUB_MACHINE_IEEE1275)) \
+  || defined (GRUB_MACHINE_UBOOT) || defined (GRUB_MACHINE_XEN) \
+  || defined(GRUB_MACHINE_XEN_PVH)
 /* FIXME: stack is between 2 heap regions. Move it.  */
 #define GRUB_KERNEL_PRELOAD_SPACE_REUSABLE 1
 #endif
@@ -106,11 +109,6 @@ extern grub_addr_t EXPORT_VAR (grub_modbase);
 
 grub_addr_t grub_modules_get_end (void);
 
-#endif
-
-#if !defined(GRUB_MACHINE_EMU)
-void EXPORT_FUNC(start) (void);
-void EXPORT_FUNC(_start) (void);
 #endif
 
 /* The start point of the C code.  */

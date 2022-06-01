@@ -53,9 +53,6 @@ static struct argp_option options[] = {
   /* TRANSLATORS: "unset" is a keyword. It's a summary of "unset" subcommand.  */
   {N_("unset [NAME ...]"),    0, 0, OPTION_DOC|OPTION_NO_USAGE,
    N_("Delete variables."), 0},
-  /* TRANSLATORS: "incr" is a keyword. It's a summary of "incr" subcommand.  */
-  {N_("incr [NAME ...]"),     0, 0, OPTION_DOC|OPTION_NO_USAGE,
-   N_("Increase value of integer variables."), 0},
 
   {0,         0, 0, OPTION_DOC, N_("Options:"), -1},
   {"verbose", 'v', 0, 0, N_("print verbose messages."), 0},
@@ -128,6 +125,7 @@ open_envblk_file (const char *name)
 {
   FILE *fp;
   char *buf;
+  long loc;
   size_t size;
   grub_envblk_t envblk;
 
@@ -146,7 +144,12 @@ open_envblk_file (const char *name)
     grub_util_error (_("cannot seek `%s': %s"), name,
 		     strerror (errno));
 
-  size = (size_t) ftell (fp);
+  loc = ftell (fp);
+  if (loc < 0)
+    grub_util_error (_("cannot get file location `%s': %s"), name,
+		     strerror (errno));
+
+  size = (size_t) loc;
 
   if (fseek (fp, 0, SEEK_SET) < 0)
     grub_util_error (_("cannot seek `%s': %s"), name,
@@ -200,7 +203,8 @@ write_envblk (const char *name, grub_envblk_t envblk)
     grub_util_error (_("cannot write to `%s': %s"), name,
 		     strerror (errno));
 
-  grub_util_file_sync (fp);
+  if (grub_util_file_sync (fp) < 0)
+    grub_util_error (_("cannot sync `%s': %s"), name, strerror (errno));
   fclose (fp);
 }
 
@@ -249,51 +253,6 @@ unset_variables (const char *name, int argc, char *argv[])
   grub_envblk_close (envblk);
 }
 
-struct get_int_value_params {
-  char *varname;
-  int value;
-};
-
-static int
-get_int_value (const char *varname, const char *value, void *hook_data)
-{
-  struct get_int_value_params *params = hook_data;
-
-  if (strcmp (varname, params->varname) == 0) {
-    params->value = strtol (value, NULL, 10);
-    return 1;
-  }
-  return 0;
-}
-
-static void
-incr_variables (const char *name, int argc, char *argv[])
-{
-  grub_envblk_t envblk;
-  char buf[16];
-
-  envblk = open_envblk_file (name);
-  while (argc)
-    {
-      struct get_int_value_params params = {
-        .varname = argv[0],
-        .value = 0, /* Consider unset variables 0 */
-      };
-
-      grub_envblk_iterate (envblk, &params, get_int_value);
-      snprintf(buf, sizeof(buf), "%d", params.value + 1);
-
-      if (! grub_envblk_set (envblk, argv[0], buf))
-        grub_util_error ("%s", _("environment block too small"));
-
-      argc--;
-      argv++;
-    }
-
-  write_envblk (name, envblk);
-  grub_envblk_close (envblk);
-}
-
 int
 main (int argc, char *argv[])
 {
@@ -333,8 +292,6 @@ main (int argc, char *argv[])
     set_variables (filename, argc - curindex, argv + curindex);
   else if (strcmp (command, "unset") == 0)
     unset_variables (filename, argc - curindex, argv + curindex);
-  else if (strcmp (command, "incr") == 0)
-    incr_variables (filename, argc - curindex, argv + curindex);
   else
     {
       char *program = xstrdup(program_name);
