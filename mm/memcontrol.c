@@ -5301,11 +5301,13 @@ static int mem_cgroup_meminfo_read_comm(struct seq_file *m, void *v, struct mem_
 	return 0;
 }
 
+#ifdef CONFIG_CGROUPFS
 int mem_cgroupfs_meminfo_show(struct seq_file *m, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_task(current);
 	return mem_cgroup_meminfo_read_comm(m, v, memcg);
 }
+#endif
 
 static int mem_cgroup_meminfo_read(struct seq_file *m, void *v)
 {
@@ -5472,11 +5474,13 @@ static int mem_cgroup_sli_show(struct seq_file *m, void *v)
 	return sli_memlat_stat_show(m, cgrp);
 }
 
+#ifdef CONFIG_CGROUPFS
 int mem_cgroupfs_vmstat_show(struct seq_file *m, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_task(current);
 	return mem_cgroup_vmstat_read_comm(m, v, memcg);
 }
+#endif
 
 static int mem_cgroup_vmstat_read(struct seq_file *m, void *vv)
 {
