@@ -1,0 +1,31 @@
+[Unit]
+Description=EKLet Agent of Tencent EKS
+Documentation=https://cloud.tencent.com
+DefaultDependencies=no
+Wants=eklet-agent-init.service
+Wants=network-online.target
+Wants=containerd.service
+After=eklet-agent-init.service
+After=network-online.target
+After=containerd.service
+
+[Service]
+ExecStart=eklet-agent
+
+Type=notify
+Delegate=yes
+KillMode=process
+Restart=always
+RestartSec=5
+# Having non-zero Limit*s causes performance problems due to accounting overhead
+# in the kernel. We recommend using cgroups to do container-local accounting.
+LimitNPROC=infinity
+LimitCORE=infinity
+LimitNOFILE=1048576
+# Comment TasksMax if your systemd version does not supports it.
+# Only systemd 226 and above support this version.
+TasksMax=infinity
+OOMScoreAdjust=-999
+
+[Install]
+WantedBy=multi-user.target

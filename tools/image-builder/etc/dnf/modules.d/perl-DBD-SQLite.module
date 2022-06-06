@@ -1,0 +1,5 @@
+[perl-DBD-SQLite]
+name=perl-DBD-SQLite
+stream=1.58
+profiles=
+state=enabled

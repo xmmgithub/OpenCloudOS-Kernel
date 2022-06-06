@@ -1,0 +1,23 @@
+#!/bin/bash
+
+arch="$1"
+[ -z "$arch" ] && exit
+
+# This is run in the build container.
+useradd builder
+
+# install cargo tools
+dnf -y --forcearch ${arch} install cargo
+
+# setup host compile tools.
+ln -fs $(which ld)      /usr/bin/${arch}-redhat-linux-ld
+ln -fs $(which ar)      /usr/bin/${arch}-redhat-linux-ar
+ln -fs $(which nm)      /usr/bin/${arch}-redhat-linux-nm
+ln -fs $(which strip)   /usr/bin/${arch}-redhat-linux-strip
+ln -fs $(which objcopy) /usr/bin/${arch}-redhat-linux-objcopy
+ln -fs $(which objdump) /usr/bin/${arch}-redhat-linux-objdump
+
+# setup host tools
+dnf -y update gcc # keep gcc version consistency with target
+dnf -y --forcearch ${arch} install modulemd-tools createrepo_c git rpm-devel rpm-libs
+dnf -y --forcearch ${arch} install grub2 qemu-img kernel-headers lz4 elfutils-devel openssl-devel

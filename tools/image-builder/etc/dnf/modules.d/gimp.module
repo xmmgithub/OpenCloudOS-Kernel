@@ -1,0 +1,5 @@
+[gimp]
+name=gimp
+stream=2.8
+profiles=
+state=enabled

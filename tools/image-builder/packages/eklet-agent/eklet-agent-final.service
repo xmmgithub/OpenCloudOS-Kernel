@@ -1,0 +1,17 @@
+[Unit]
+Description=Finalize EKLet Agent of Tencent EKS
+Documentation=https://cloud.tencent.com
+DefaultDependencies=no
+Wants=eklet-agent-config.service
+Wants=network-online.target
+After=eklet-agent-config.service
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/eklet-agent/final.sh
+RemainAfterExit=yes
+TimeoutSec=0
+
+[Install]
+WantedBy=multi-user.target

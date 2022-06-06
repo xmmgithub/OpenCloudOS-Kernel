@@ -1,0 +1,60 @@
+# TencentOS-Sources.repo
+#
+# Author: TencentOS team <g_APD_SRDC_OS@tencent.com>
+#
+#
+[TencentOS-source]
+name=TencentOS Server $releasever - TencentOS Sources
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS/SRPMS/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS/SRPMS/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[Updates-source]
+name=TencentOS Server $releasever - Updates
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/Updates/SRPMS/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/Updates/SRPMS/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[TencentOS-AppStream-source]
+name=TencentOS Server $releasever - TencentOS Sources
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS-AppStream/SRPMS/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS-AppStream/SRPMS/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[TencentOS-testing-source]
+name=TencentOS Server $releasever - TencentOS-testing Sources
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/TencentOS-testing/SRPMS/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/TencentOS-testing/SRPMS/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[BaseOS-source]
+name=TencentOS Server $releasever - Base Sources
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/BaseOS/Source/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/BaseOS/Source/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
+
+[AppStream-source]
+name=TencentOS Server $releasever - AppStream Sources
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/AppStream/Source/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/AppStream/Source/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
+
+[PowerTools-source]
+name=TencentOS Server $releasever - PowerTools Sources
+baseurl=http://mirrors.tencent.com/tlinux/$releasever/PowerTools/Source/
+        https://mirrors-tlinux.tencentyun.com/tlinux/$releasever/PowerTools/Source/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial
