@@ -2694,6 +2694,7 @@ static int cpuset_cgroup_stat_show_comm(struct seq_file *sf, void *v, struct cpu
 	return 0;
 }
 
+#ifdef CONFIG_CGROUPFS
 int cpuset_cgroupfs_stat_show(struct seq_file *m, void *v)
 {
 	struct cgroup_subsys_state *css = task_css(current, cpuset_cgrp_id);
@@ -2701,6 +2702,7 @@ int cpuset_cgroupfs_stat_show(struct seq_file *m, void *v)
 	int max_cpu = cpu_get_max_cpus(current);
 	return cpuset_cgroup_stat_show_comm(m, v, cs, max_cpu);
 }
+#endif
 
 static int cpuset_cgroup_stat_show(struct seq_file *sf, void *v)
 {
@@ -2856,6 +2858,7 @@ static int cpuset_cgroup_cpuinfo_show_comm(struct seq_file *sf, void *v, struct 
 	return 0;
 }
 
+#ifdef CONFIG_CGROUPFS
 /* return 1 if allowed, otherwise 0 is returned */
 int cpuset_cgroups_cpu_allowed(struct task_struct *task, int cpu, int once)
 {
@@ -2883,6 +2886,7 @@ int cpuset_cgroupfs_cpuinfo_show(struct seq_file *m, void *v)
 	int max_cpu = cpu_get_max_cpus(current);
 	return cpuset_cgroup_cpuinfo_show_comm(m, v, cs, max_cpu);
 }
+#endif
 
 static int cpuset_cgroup_cpuinfo_show(struct seq_file *sf, void *v)
 {
@@ -4181,12 +4185,14 @@ static int cpuset_cgroup_loadavg_show_comm(struct seq_file *sf, void *v, struct 
 	return 0;
 }
 
+#ifdef CONFIG_CGROUPFS
 int cpuset_cgroupfs_loadavg_show(struct seq_file *m, void *v)
 {
 	struct cgroup_subsys_state *css = task_css(current, cpuset_cgrp_id);
 	struct cpuset *cs = css_cs(css);
 	return cpuset_cgroup_loadavg_show_comm(m, v, cs);
 }
+#endif
 
 static int cpuset_cgroup_loadavg_show(struct seq_file *sf, void *v)
 {
