@@ -1,0 +1,5 @@
+[perl-DBD-MySQL]
+name=perl-DBD-MySQL
+stream=4.046
+profiles=
+state=enabled

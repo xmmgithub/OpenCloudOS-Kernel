@@ -1,0 +1,22 @@
+subreaper = true
+oom_score = -999
+disabled_plugins = ["restart"]
+root = "/var/lib/containerd"
+state = "/run/containerd"
+
+[plugins]
+  [plugins.cri]
+    max_concurrent_downloads = 10
+    sandbox_image = "ccr.ccs.tencentyun.com/library/pause:3.2"
+  [plugins.cri.containerd]
+    default_runtime_name = "runc"
+    [plugins.cri.containerd.runtimes]
+      [plugins.cri.containerd.runtimes.runc]
+        runtime_type = "io.containerd.runc.v2"
+        privileged_without_host_devices = false
+        [plugins.cri.containerd.runtimes.runc.options]
+          BinaryName = "/usr/sbin/runc"
+  [plugins.cri.registry]
+    [plugins.cri.registry.mirrors]
+      [plugins.cri.registry.mirrors."docker.io"]
+        endpoint = ["https://mirror.ccs.tencentyun.com"]

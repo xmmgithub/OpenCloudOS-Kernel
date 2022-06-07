@@ -1,0 +1,9 @@
+NAME="EKS"
+VERSION="2.0"
+ID=eks
+PRETTY_NAME="EKS 2.0"
+VERSION_ID="2.0"
+HOME_URL="https://cloud.tencent.com/product/eks"
+SUPPORT_URL="https://cloud.tencent.com/act/event/service-support"
+BUG_REPORT_URL="https://console.cloud.tencent.com/workorder"
+PRIVACY_POLICY_URL="https://cloud.tencent.com/document/product/301/11470"

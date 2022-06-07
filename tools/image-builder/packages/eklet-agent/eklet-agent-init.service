@@ -1,0 +1,17 @@
+[Unit]
+Description=Initialize EKLet Agent of Tencent EKS
+Documentation=https://cloud.tencent.com
+DefaultDependencies=no
+Wants=eklet-agent-config.service
+Wants=containerd.service
+After=eklet-agent-config.service
+Before=containerd.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/eklet-agent/eklet-agent-init
+RemainAfterExit=yes
+TimeoutSec=0
+
+[Install]
+WantedBy=multi-user.target
