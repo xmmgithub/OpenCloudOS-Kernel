@@ -1,0 +1,21 @@
+[workspace]
+members = [
+  "kernel-5.4.87",
+  "kernel-5.4.119",
+  "release",
+  "growpart",
+  "glibc",
+  "libstd-rust",
+  "libseccomp",
+  "ca-certificates",
+  "eklet-agent",
+  "containerd",
+  "runc",
+]
+
+[profile.dev]
+debug = false
+opt-level = 'z'
+
+[profile.dev.build-override]
+opt-level = 'z'

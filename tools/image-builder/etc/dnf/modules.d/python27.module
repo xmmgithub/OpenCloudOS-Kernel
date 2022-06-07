@@ -1,0 +1,5 @@
+[python27]
+name=python27
+stream=2.7
+profiles=
+state=enabled

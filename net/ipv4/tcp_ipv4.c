@@ -1298,8 +1298,8 @@ EXPORT_SYMBOL(tcp_v4_md5_hash_skb);
 #endif
 
 /* Called with rcu_read_lock() */
-static bool tcp_v4_inbound_md5_hash(const struct sock *sk,
-				    const struct sk_buff *skb)
+static enum skb_drop_reason
+tcp_v4_inbound_md5_hash(const struct sock *sk, const struct sk_buff *skb)
 {
 #ifdef CONFIG_TCP_MD5SIG
 	/*
@@ -1323,16 +1323,16 @@ static bool tcp_v4_inbound_md5_hash(const struct sock *sk,
 
 	/* We've parsed the options - do we have a hash? */
 	if (!hash_expected && !hash_location)
-		return false;
+		return SKB_NOT_DROPPED_YET;
 
 	if (hash_expected && !hash_location) {
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPMD5NOTFOUND);
-		return true;
+		return SKB_DROP_REASON_TCP_MD5NOTFOUND;
 	}
 
 	if (!hash_expected && hash_location) {
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPMD5UNEXPECTED);
-		return true;
+		return SKB_DROP_REASON_TCP_MD5UNEXPECTED;
 	}
 
 	/* Okay, so this is hash_expected and hash_location -
@@ -1349,11 +1349,11 @@ static bool tcp_v4_inbound_md5_hash(const struct sock *sk,
 				     &iph->daddr, ntohs(th->dest),
 				     genhash ? " tcp_v4_calc_md5_hash failed"
 				     : "");
-		return true;
+		return SKB_DROP_REASON_TCP_MD5FAILURE;
 	}
-	return false;
+	return SKB_NOT_DROPPED_YET;
 #endif
-	return false;
+	return SKB_NOT_DROPPED_YET;
 }
 
 static void tcp_v4_init_req(struct request_sock *req,
@@ -1558,6 +1558,7 @@ u16 tcp_v4_get_syncookie(struct sock *sk, struct iphdr *iph,
  */
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
+	enum skb_drop_reason reason;
 	struct sock *rsk;
 
 	if (sk->sk_state == TCP_ESTABLISHED) { /* Fast path */
@@ -1576,6 +1577,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		return 0;
 	}
 
+	reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	if (tcp_checksum_complete(skb))
 		goto csum_err;
 
@@ -1607,7 +1609,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 reset:
 	tcp_v4_send_reset(rsk, skb);
 discard:
-	kfree_skb(skb);
+	kfree_skb_reason(skb, reason);
 	/* Be careful here. If this function gets more complicated and
 	 * gcc suffers from register pressure on the x86, sk (in %ebx)
 	 * might be destroyed here. This current version compiles correctly,
@@ -1616,6 +1618,7 @@ discard:
 	return 0;
 
 csum_err:
+	reason = SKB_DROP_REASON_TCP_CSUM;
 	TCP_INC_STATS(sock_net(sk), TCP_MIB_CSUMERRORS);
 	TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
 	goto discard;
@@ -1660,7 +1663,8 @@ int tcp_v4_early_demux(struct sk_buff *skb)
 	return 0;
 }
 
-bool tcp_add_backlog(struct sock *sk, struct sk_buff *skb)
+bool tcp_add_backlog(struct sock *sk, struct sk_buff *skb,
+		     enum skb_drop_reason *reason)
 {
 	u32 limit = READ_ONCE(sk->sk_rcvbuf) + READ_ONCE(sk->sk_sndbuf);
 	u32 tail_gso_size, tail_gso_segs;
@@ -1686,6 +1690,7 @@ bool tcp_add_backlog(struct sock *sk, struct sk_buff *skb)
 
 	if (unlikely(tcp_checksum_complete(skb))) {
 		bh_unlock_sock(sk);
+		*reason = SKB_DROP_REASON_TCP_CSUM;
 		__TCP_INC_STATS(sock_net(sk), TCP_MIB_CSUMERRORS);
 		__TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
 		return true;
@@ -1774,6 +1779,7 @@ no_coalesce:
 
 	if (unlikely(sk_add_backlog(sk, skb, limit))) {
 		bh_unlock_sock(sk);
+		*reason = SKB_DROP_REASON_SOCKET_BACKLOG;
 		__NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPBACKLOGDROP);
 		return true;
 	}
@@ -1824,6 +1830,7 @@ static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 int tcp_v4_rcv(struct sk_buff *skb)
 {
 	struct net *net = dev_net(skb->dev);
+	enum skb_drop_reason drop_reason;
 	struct sk_buff *skb_to_free;
 	int sdif = inet_sdif(skb);
 	const struct iphdr *iph;
@@ -1832,6 +1839,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	struct sock *sk;
 	int ret;
 
+	drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
 
@@ -1845,8 +1853,10 @@ int tcp_v4_rcv(struct sk_buff *skb)
 
 	th = (const struct tcphdr *)skb->data;
 
-	if (unlikely(th->doff < sizeof(struct tcphdr) / 4))
+	if (unlikely(th->doff < sizeof(struct tcphdr) / 4)) {
+		drop_reason = SKB_DROP_REASON_PKT_TOO_SMALL;
 		goto bad_packet;
+	}
 	if (!pskb_may_pull(skb, th->doff * 4)) {
 		__NET_INC_DROPSTATS(net, LINUX_MIB_TCPBADPKTDROP);
 		goto discard_it;
@@ -1878,7 +1888,8 @@ process:
 		struct sock *nsk;
 
 		sk = req->rsk_listener;
-		if (unlikely(tcp_v4_inbound_md5_hash(sk, skb))) {
+		drop_reason = tcp_v4_inbound_md5_hash(sk, skb);
+		if (unlikely(drop_reason)) {
 			sk_drops_add(sk, skb);
 			reqsk_put(req);
 			__NET_INC_DROPSTATS(net, LINUX_MIB_TCPMD5DROP);
@@ -1903,6 +1914,8 @@ process:
 			iph = ip_hdr(skb);
 			tcp_v4_fill_cb(skb, iph, th);
 			nsk = tcp_check_req(sk, skb, req, false, &req_stolen);
+		} else {
+			drop_reason = SKB_DROP_REASON_SOCKET_FILTER;
 		}
 		if (!nsk) {
 			reqsk_put(req);
@@ -1935,11 +1948,13 @@ process:
 	}
 
 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb)) {
+		drop_reason = SKB_DROP_REASON_XFRM_POLICY;
 		__NET_INC_DROPSTATS(net, LINUX_MIB_TCPXFRMDROP);
 		goto discard_and_relse;
 	}
 
-	if (tcp_v4_inbound_md5_hash(sk, skb)) {
+	drop_reason = tcp_v4_inbound_md5_hash(sk, skb);
+	if (drop_reason) {
 		__NET_INC_DROPSTATS(net, LINUX_MIB_TCPMD5DROP);
 		goto discard_and_relse;
 	}
@@ -1948,6 +1963,7 @@ process:
 
 	if (tcp_filter(sk, skb)) {
 		__NET_INC_DROPSTATS(net, LINUX_MIB_TCPFILTERDROP);
+		drop_reason = SKB_DROP_REASON_SOCKET_FILTER;
 		goto discard_and_relse;
 	}
 	th = (const struct tcphdr *)skb->data;
@@ -1971,7 +1987,7 @@ process:
 		sk->sk_rx_skb_cache = NULL;
 		ret = tcp_v4_do_rcv(sk, skb);
 	} else {
-		if (tcp_add_backlog(sk, skb))
+		if (tcp_add_backlog(sk, skb, &drop_reason))
 			goto discard_and_relse;
 		skb_to_free = NULL;
 	}
@@ -1986,6 +2002,7 @@ put_and_return:
 	return ret;
 
 no_tcp_socket:
+	drop_reason = SKB_DROP_REASON_NO_SOCKET;
 	__NET_INC_DROPSTATS(net, LINUX_MIB_TCPNOSOCKETDROP);
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto discard_it;
@@ -1994,6 +2011,7 @@ no_tcp_socket:
 
 	if (tcp_checksum_complete(skb)) {
 csum_error:
+		drop_reason = SKB_DROP_REASON_TCP_CSUM;
 		__TCP_INC_STATS(net, TCP_MIB_CSUMERRORS);
 bad_packet:
 		__TCP_INC_STATS(net, TCP_MIB_INERRS);
@@ -2002,8 +2020,9 @@ bad_packet:
 	}
 
 discard_it:
+	SKB_DR_OR(drop_reason, NOT_SPECIFIED);
 	/* Discard frame. */
-	kfree_skb(skb);
+	kfree_skb_reason(skb, drop_reason);
 	return 0;
 
 discard_and_relse:
@@ -2014,6 +2033,7 @@ discard_and_relse:
 
 do_time_wait:
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
+		drop_reason = SKB_DROP_REASON_XFRM_POLICY;
 		inet_twsk_put(inet_twsk(sk));
 		__NET_INC_DROPSTATS(net, LINUX_MIB_TCPXFRMDROP);
 		goto discard_it;

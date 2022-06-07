@@ -1,0 +1,27 @@
+%_cross_arch x86_64
+%_cross_karch x86
+%_cross_kimage bzImage
+%_cross_cpu_family x86
+%_cross_endian little
+
+%_cross_bios_plat   pc
+%_cross_bios_target i386
+%_cross_bios_tuple i386-pc
+%_cross_bios_prefix (,msdos2)/boot/grub
+
+%_cross_grubdir /boot/grub
+
+%_cross_efi_tuple x86_64-efi
+%_cross_efi_prefix /EFI/BOOT
+%_cross_efi_image bootx64.efi
+%_cross_efidir /boot/efi/EFI/BOOT
+
+%_cross_go_arch amd64
+
+%_cross_vendor eks
+%_cross_os %{_cross_vendor}-%{_cross_arch}-
+%_cross_triple %{_cross_arch}-%{_cross_vendor}-linux
+
+%_cross_target %{_cross_arch}-redhat-linux
+%dist %{nil}
+
