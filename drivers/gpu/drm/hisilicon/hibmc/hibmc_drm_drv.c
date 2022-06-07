@@ -331,7 +331,7 @@ static int hibmc_pci_probe(struct pci_dev *pdev,
 	struct drm_device *dev;
 	int ret;
 
-	ret = drm_fb_helper_remove_conflicting_pci_framebuffers(pdev,
+	ret = drm_fb_helper_remove_conflicting_pci_framebuffers(pdev, 0,
 								"hibmcdrmfb");
 	if (ret)
 		return ret;
