@@ -548,6 +548,9 @@ sed -i "/^SUBLEVEL/cSUBLEVEL = $(echo %{kernel_majver} | cut -d '.' -f 3)" $_Ker
 %global perf_make EXTRA_CFLAGS="${RPM_OPT_FLAGS}" LDFLAGS="%{__global_ldflags}" WERROR=0 NO_LIBUNWIND=1 HAVE_CPLUS_DEMANGLE=1 NO_GTK2=1 NO_STRLCPY=1 NO_BIONIC=1 %{make} %{tools_make_opts}
 %global bpftool_make EXTRA_CFLAGS="${RPM_OPT_FLAGS}" EXTRA_LDFLAGS="%{__global_ldflags}" VMLINUX_H="$_KernVmlinuxH" %{make} %{tools_make_opts}
 
+# TK4: Workaround, Makefile fails with mass parallel build
+%global tools_make %{tools_make} -j1
+
 ### Real make
 %{prepare_buildvar}
 
@@ -1192,7 +1195,6 @@ fi
 %{_bindir}/lsgpio
 %{_bindir}/gpio-hammer
 %{_bindir}/gpio-event-mon
-%{_bindir}/gpio-watch
 %{_bindir}/page_owner_sort
 %{_bindir}/slabinfo
 
@@ -1219,9 +1221,6 @@ fi
 %{_sbindir}/bpftool
 %{_sysconfdir}/bash_completion.d/bpftool
 %{_mandir}/man8/bpftool-cgroup.8.gz
-%{_mandir}/man8/bpftool-gen.8.gz
-%{_mandir}/man8/bpftool-iter.8.gz
-%{_mandir}/man8/bpftool-link.8.gz
 %{_mandir}/man8/bpftool-map.8.gz
 %{_mandir}/man8/bpftool-prog.8.gz
 %{_mandir}/man8/bpftool-perf.8.gz
@@ -1229,7 +1228,7 @@ fi
 %{_mandir}/man8/bpftool-net.8.gz
 %{_mandir}/man8/bpftool-feature.8.gz
 %{_mandir}/man8/bpftool-btf.8.gz
-%{_mandir}/man8/bpftool-struct_ops.8.gz
+%{_mandir}/man7/bpf-helpers.7.gz
 
 %if %{with_debuginfo}
 %files -f bpftool-debuginfo.list -n bpftool-debuginfo
