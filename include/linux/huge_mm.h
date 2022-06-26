@@ -91,6 +91,7 @@ extern bool is_vma_temporary_stack(struct vm_area_struct *vma);
 
 extern unsigned long transparent_hugepage_flags;
 
+#ifndef CONFIG_MEMCG_THP
 /*
  * to be used on vmas which are known to support THP.
  * Use transparent_hugepage_enabled otherwise
@@ -123,6 +124,7 @@ static inline bool __transparent_hugepage_enabled(struct vm_area_struct *vma)
 
 	return false;
 }
+#endif
 
 bool transparent_hugepage_enabled(struct vm_area_struct *vma);
 
@@ -280,6 +282,11 @@ static inline struct list_head *page_deferred_list(struct page *page)
 	 */
 	return &page[2].deferred_list;
 }
+
+#ifdef CONFIG_MEMCG_THP
+extern struct static_key_false cgroup_thp_enabled;
+inline bool __transparent_hugepage_enabled(struct vm_area_struct *vma);
+#endif
 
 #else /* CONFIG_TRANSPARENT_HUGEPAGE */
 #define HPAGE_PMD_SHIFT ({ BUILD_BUG(); 0; })

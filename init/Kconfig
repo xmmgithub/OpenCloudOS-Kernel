@@ -833,6 +833,13 @@ config MEMCG_KMEM
 	depends on MEMCG && !SLOB
 	default y
 
+config MEMCG_THP
+	bool "Transparent hugepage controller"
+	depends on MEMCG && TRANSPARENT_HUGEPAGE
+	default n
+	help
+	  Provides control transparent hugepage in a cgroup.
+
 config BLK_CGROUP
 	bool "IO controller"
 	depends on BLOCK

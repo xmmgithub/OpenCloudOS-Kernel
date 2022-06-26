@@ -25,6 +25,7 @@ static inline void collapse_pte_mapped_thp(struct mm_struct *mm,
 }
 #endif
 
+#ifndef CONFIG_MEMCG_THP
 #define khugepaged_enabled()					       \
 	(transparent_hugepage_flags &				       \
 	 ((1<<TRANSPARENT_HUGEPAGE_FLAG) |		       \
@@ -35,6 +36,11 @@ static inline void collapse_pte_mapped_thp(struct mm_struct *mm,
 #define khugepaged_req_madv()					\
 	(transparent_hugepage_flags &				\
 	 (1<<TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG))
+#else /* CONFIG_MEMCG_THP */
+extern inline int khugepaged_enabled(void);
+extern inline int khugepaged_always(struct vm_area_struct *vma);
+extern inline int khugepaged_req_madv(struct vm_area_struct *vma);
+#endif
 #define khugepaged_defrag()					\
 	(transparent_hugepage_flags &				\
 	 (1<<TRANSPARENT_HUGEPAGE_DEFRAG_KHUGEPAGED_FLAG))
@@ -56,10 +62,17 @@ static inline int khugepaged_enter(struct vm_area_struct *vma,
 				   unsigned long vm_flags)
 {
 	if (!test_bit(MMF_VM_HUGEPAGE, &vma->vm_mm->flags))
+#ifndef CONFIG_MEMCG_THP
 		if ((khugepaged_always() ||
 		     (khugepaged_req_madv() && (vm_flags & VM_HUGEPAGE))) &&
 		    !(vm_flags & VM_NOHUGEPAGE) &&
 		    !test_bit(MMF_DISABLE_THP, &vma->vm_mm->flags))
+#else
+		if ((khugepaged_always(vma) ||
+		     (khugepaged_req_madv(vma) && (vm_flags & VM_HUGEPAGE))) &&
+		    !(vm_flags & VM_NOHUGEPAGE) &&
+		    !test_bit(MMF_DISABLE_THP, &vma->vm_mm->flags))
+#endif
 			if (__khugepaged_enter(vma->vm_mm))
 				return -ENOMEM;
 	return 0;
