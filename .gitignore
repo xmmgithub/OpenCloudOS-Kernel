@@ -146,3 +146,7 @@ x509.genkey
 
 # Clang's compilation database file
 /compile_commands.json
+
+# OpenCloudOS dist files
+/dist/rpm
+/dist/workdir
