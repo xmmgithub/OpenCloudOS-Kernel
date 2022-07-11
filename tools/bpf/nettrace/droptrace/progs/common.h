@@ -1,7 +1,7 @@
 #include <vmlinux.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_endian.h>
-#include <bpf/bpf_tracing.h>
+#include <bpf_helpers.h>
+#include <bpf_endian.h>
+#include <bpf_tracing.h>
 #include <skb_utils.h>
 
 #include "shared.h"
